@@ -16,6 +16,8 @@ The pack's own guide - milestones, the flow, clarification and what the owner do
 
 The packs ship as [Intelligence Packages](https://github.com/ainova-systems/intelligence), installed with the Intelligence CLI. Needs Node.js 18+, git, bash and awk.
 
+The package name `@ainova-systems/operator` is the Intelligence package from this repository; the Operator runtime is a separate npm package with the same name, installed with npm, not with `intelligence package add`.
+
 ```bash
 npm install -g @ainova-systems/intelligence
 
@@ -42,7 +44,7 @@ Then run `dev-init` so the project profile, the `ai:*` labels and the PR templat
 
 1. **Profile keys.** Add the keys you set to the project profile (with core installed, its `dev-project-profile.md` rule). Every key, its default and its meaning is in [`packs/operator/templates/operator-project-profile.md`](packs/operator/templates/operator-project-profile.md); a key left out takes its default.
 2. **Operator configuration.** Write the JSON file profile `operator_config` names - milestone and label roles, owner author associations, slots, QA admission, CI workflows, markers. Schema: [`operator-config.md`](packs/operator/skills/operator-contract/references/operator-config.md); example: [`operator-config.example.json`](packs/operator/skills/operator-contract/references/operator-config.example.json).
-3. **Forge.** Point profile `forge_cli` at the forge contract command; on GitHub that is the pack's `forge-github.mjs` ([contract](packs/operator/skills/operator-contract/references/forge-contract.md)).
+3. **Forge.** Point profile `forge_cli` at the forge contract command; on GitHub that is the pack's `forge-github.mjs` ([contract](packs/operator/skills/operator-contract/references/forge-contract.md)). The script and its tests need Node.js 18+ (built-in modules only, no npm dependencies) and the GitHub CLI `gh`, authenticated for the repository; CI runs them on Node.js 24.
 4. **Discovery.** Provide the project's discovery command in profile `operator_discover` ([contract](packs/operator/skills/operator-contract/references/discovery-contract.md)). With `--standalone` it names the next skill for each pull request, which is how the flow runs by hand without the runtime.
 5. **Runtime.** Declare the operations in the project's `operator.yaml` and start the [Operator runtime](https://github.com/ainova-systems/operator-autopilot).
 

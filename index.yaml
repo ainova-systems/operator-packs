@@ -1,0 +1,21 @@
+# Registry index for this repository.
+#
+# This repo holds Operator scenario packs, so the package names are not
+# repository names and cannot be resolved by convention. The Intelligence CLI
+# reads this file from the repository root to map them to their sources:
+#
+#   intelligence registry add https://github.com/ainova-systems/operator-packs.git
+#   intelligence package search
+#   intelligence package add @ainova-systems/operator
+#
+# A name resolves only through a registry the project has explicitly trusted:
+# there is no built-in catalog and no name-to-repository guessing, so adding
+# this registry is what makes the names below installable. Versions live in
+# this repository's git tags (x.y.z, optional `v`), not in this file: a
+# project's range resolves against them and pins the resolved tag and commit
+# in its intelligence.lock.
+packages:
+  "@ainova-systems/operator":
+    url: "https://github.com/ainova-systems/operator-packs.git"
+    path: "packs/operator"
+    description: "Phase skills the Operator runtime runs: intake, plan, implement, review, verify, merge and clarify, each also runnable by hand, plus the forge contract and its GitHub implementation. Core recommended, optional via profile keys."

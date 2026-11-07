@@ -145,7 +145,14 @@ label_rule_for() {
     local own="$1skills/operator-contract/references/pr-state.md"
     local base
     base="$(find "$PACKS_DIR" -path '*/skills/operator-contract/references/pr-state.md' | head -n 1 || true)"
-    if [ -f "$own" ]; then echo "$own"; elif [ -n "$base" ]; then echo "$base"; else echo "$PACKS_DIR/core/rules/git-workflow.md"; fi
+    if [ -f "$own" ]; then
+        echo "$own"
+    elif [ -n "$base" ] && [ "$(basename "$1")" != core ] && [ -z "$(find "$1" -path '*/templates/*-project-profile.md' | head -n 1)" ]; then
+        # Only a pack without a schema of its own builds on the contract pack.
+        echo "$base"
+    else
+        echo "$PACKS_DIR/core/rules/git-workflow.md"
+    fi
 }
 for pack_dir in "$PACKS_DIR"/*/; do
     [ -d "$pack_dir" ] || continue

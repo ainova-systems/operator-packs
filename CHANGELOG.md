@@ -22,8 +22,9 @@ intelligence package remove @ainova-systems/operator
 intelligence package add @ainova-systems/operator-development@^0.14.0
 ```
 
-- In `intelligence.yaml` `sources.skills`, replace `.intelligence/packages/@ainova-systems/operator/skills` with `.intelligence/packages/@ainova-systems/operator-development/skills`, then run `intelligence sync`.
-- Point profile `forge_cli` at `.intelligence/packages/@ainova-systems/operator-development/skills/operator-contract/scripts/forge-github.mjs`.
+- In `intelligence.yaml` `sources.skills`, replace `.intelligence/packages/@ainova-systems/operator/skills` with `.intelligence/packages/@ainova-systems/operator-development/skills`.
+- Point profile `forge_cli`, and any project script importing the forge script, at `.intelligence/packages/@ainova-systems/operator-development/skills/operator-contract/scripts/forge-github.mjs`.
+- Run `intelligence sync`.
 
 ## [0.13.0] - 2026-11-06
 

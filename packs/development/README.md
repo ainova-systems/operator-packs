@@ -1,4 +1,4 @@
-# Operator pack
+# Development pack
 
 Phase skills for the operator runtime (`@ainova-systems/operator`). The runtime is generic: it runs
 the operations a project's `operator.yaml` declares, on timers and triggers, and holds pools, jobs

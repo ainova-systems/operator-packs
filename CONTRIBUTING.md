@@ -4,7 +4,7 @@ Contributions are welcome: new scenario packs, skill refinements, fixes to the f
 
 ## Repository layout
 
-Content lives in packs under `packs/<name>/` (`skills/`, optional `rules/`, `agents/`, `templates/`). A **pack** is one Operator scenario and its adoption unit (`operator` is pull-request delivery); a **domain prefix** (`operator-`) is a namespace on each artifact. Root holds the OSS furniture: README, LICENSE, CHANGELOG, `index.yaml`, `scripts/`, `.github/`.
+Content lives in packs under `packs/<flow>/` (`skills/`, optional `rules/`, `agents/`, `templates/`). A **pack** is one Operator flow and its adoption unit, named after the flow and installed as `@ainova-systems/operator-<flow>` (`development` is pull-request delivery); a **domain prefix** (`operator-`) is a namespace on each artifact. Root holds the OSS furniture: README, LICENSE, CHANGELOG, `index.yaml`, `scripts/`, `.github/`.
 
 The core and spec packs the scenario packs build on live in [intelligence-dev-packs](https://github.com/ainova-systems/intelligence-dev-packs); this repository holds only what the Operator runtime runs.
 

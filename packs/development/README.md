@@ -1,4 +1,4 @@
-# Operator pack
+# Development pack
 
 Phase skills for the operator runtime (`@ainova-systems/operator`). The runtime is generic: it runs
 the operations a project's `operator.yaml` declares, on timers and triggers, and holds pools, jobs
@@ -13,7 +13,7 @@ branch, plus profile `flow_implement` for the implementation itself.
 For a clean start install the core pack beside this one: every delegated-step key defaults to a
 core skill, and core's `git-workflow` rule states the same label, factor and report vocabulary.
 A project that already has its own equivalents points the keys at them instead. What a replacement
-must honour is the contract the operator pack owns - the state labels and their single writer, the
+must honour is the contract this pack owns - the state labels and their single writer, the
 success factors and their freshness at head (the verification steps and review body digests included), the stage
 report envelope and the claim (`operator-contract` > `references/pr-state.md`, which wins for operator
 runs when both packs are installed) - and the duty each key's row in the Delegated steps table names.

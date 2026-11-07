@@ -1,10 +1,10 @@
 ---
-description: Project profile keys the operator pack's skills read, with their defaults
+description: Project profile keys the development pack's skills read, with their defaults
 ---
 
 # Operator profile keys (schema)
 
-> The one definition of every project profile key the operator pack reads. A project adds the keys
+> The one definition of every project profile key the development pack reads. A project adds the keys
 > it sets to its project profile - the always-on rule its other skills read their profile from
 > (with the core pack installed, its `dev-project-profile.md`); a key left out takes the default
 > below. Keep entries as plain `key: value` lines so both humans and agents parse them reliably.
@@ -13,7 +13,7 @@ description: Project profile keys the operator pack's skills read, with their de
 
 - operator_config: none              <!-- the operator configuration JSON: milestone and label roles, owner author associations, slots, QA admission, CI workflows, markers and send-back routes; schema and defaults operator-contract > references/operator-config.md, example references/operator-config.example.json -->
 - operator_discover: none            <!-- the project's discovery command: --standalone names the next skill per PR, --request <n> the request for one PR, --steps-digest <n>, --body-digest <n>, --owner-input <n>, and its runtime pass; contract operator-contract > references/discovery-contract.md -->
-- forge_cli: none                    <!-- the forge contract command every code-host call goes through (operator-contract > references/forge-contract.md); on GitHub: OPERATOR_CONFIG=<operator_config> node <operator pack>/skills/operator-contract/scripts/forge-github.mjs -->
+- forge_cli: none                    <!-- the forge contract command every code-host call goes through (operator-contract > references/forge-contract.md); on GitHub: OPERATOR_CONFIG=<operator_config> node <development pack>/skills/operator-contract/scripts/forge-github.mjs -->
 - qa_status: none                    <!-- how to read whether a QA deployment serves a head, and its address; none = no QA environment -->
 - qa_feedback: none                  <!-- command listing QA tickets for a PR; none = no tickets -->
 - qa_feedback_status: none           <!-- command moving one QA ticket to in progress or completed with a note for its submitter; none = tickets stay as their submitter left them -->

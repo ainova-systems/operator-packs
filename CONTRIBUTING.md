@@ -21,7 +21,7 @@ Every artifact must pass one test: **would this apply unchanged to any repositor
 
 - Every rule, agent, and skill name starts with a known domain prefix (`operator-`). The validator checks each artifact against that set; introduce a new domain by adding its prefix to `KNOWN_PREFIXES` in `scripts/validate-pack.sh`.
 - Skills: a folder in `skills/` whose name matches the `name:` frontmatter of its `SKILL.md`. Self-contained steps, a `Verify` section, a `Scope / hand-off` section, and a `Constraints` section for true invariants.
-- The `ai:*` label vocabulary is defined once per pack (the operator pack's `skills/operator-contract/references/pr-state.md`) and only cited elsewhere; the validator fails a label the definition page does not name.
+- The `ai:*` label vocabulary is defined once per pack (the development pack's `skills/operator-contract/references/pr-state.md`) and only cited elsewhere; the validator fails a label the definition page does not name.
 - References are written in backticks, and the validator depends on it - it has no other way to tell a reference from prose. A profile key appears as `` `qa_status` `` or `` `qa_status: none` ``, and as ``profile `qa_status` `` when naming the lookup. An artifact is named the same way (`` `operator-verify` ``), and every such name in a domain this repository holds must resolve to a real rule, agent, skill or template. Names of core skills are defaults a pack does not need, so they are not checked here.
 - Scripts are plain Node.js with no dependencies, and each ships a `*.test.mjs` beside it that runs under `node --test`.
 - Frontmatter follows the [Intelligence engine conventions](https://github.com/ainova-systems/intelligence) so the pack renders cleanly to every supported tool.

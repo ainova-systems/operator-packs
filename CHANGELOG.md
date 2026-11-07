@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-07
+
+Packs are named after the flow they run, so later flows sit beside this one.
+
+### Changed
+
+- The pull-request delivery pack is `@ainova-systems/operator-development` in `packs/development`; `@ainova-systems/operator` stays the name of the Operator runtime's npm package only. Skill names are unchanged.
+
+**Updating:**
+
+```bash
+intelligence package remove @ainova-systems/operator
+intelligence package add @ainova-systems/operator-development@^0.14.0
+```
+
+- In `intelligence.yaml` `sources.skills`, replace `.intelligence/packages/@ainova-systems/operator/skills` with `.intelligence/packages/@ainova-systems/operator-development/skills`, then run `intelligence sync`.
+- Point profile `forge_cli` at `.intelligence/packages/@ainova-systems/operator-development/skills/operator-contract/scripts/forge-github.mjs`.
+
 ## [0.13.0] - 2026-11-06
 
 The operator pack has its own repository, its profile keys live in the pack, and queue documents go through a pull request unless `direct_lane` names them.

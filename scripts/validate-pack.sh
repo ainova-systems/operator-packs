@@ -136,15 +136,13 @@ fi
 [ "$pack_count" -gt 0 ] || fail "no packs found under packs/"
 
 # One source per convention (dev-context-engineering): the ai:* label vocabulary is
-# defined once per pack and only cited elsewhere - core's git-workflow rule, and for the
-# operator pack its own pr-state page, so that pack checks without core. A label an artifact
+# defined once per pack and only cited elsewhere - core's git-workflow rule, or a pack's own
+# pr-state page when it ships one, so that pack checks without core. A label an artifact
 # uses but its definition site never names is a second definition site - the failure mode
 # that recurred three times before this check existed.
 label_rule_for() {
-    case "$(basename "$1")" in
-        operator) echo "$1skills/operator-contract/references/pr-state.md" ;;
-        *) echo "$PACKS_DIR/core/rules/git-workflow.md" ;;
-    esac
+    local own="$1skills/operator-contract/references/pr-state.md"
+    if [ -f "$own" ]; then echo "$own"; else echo "$PACKS_DIR/core/rules/git-workflow.md"; fi
 }
 for pack_dir in "$PACKS_DIR"/*/; do
     [ -d "$pack_dir" ] || continue
@@ -170,7 +168,7 @@ done
 # Every artifact an artifact names must exist. Renaming or removing one otherwise
 # leaves a dangling reference that reads as a working hand-off. A name in a domain no pack
 # here holds is an optional artifact of a pack that is not in this repository (the
-# operator pack names core skills from intelligence-dev-packs as defaults it does not
+# development pack names core skills from intelligence-dev-packs as defaults it does not
 # need), so it is not checked.
 present_domains="$(find "$PACKS_DIR"/*/rules "$PACKS_DIR"/*/agents "$PACKS_DIR"/*/skills "$PACKS_DIR"/*/templates \
     -mindepth 1 -maxdepth 1 2>/dev/null | sed 's|.*/||' | grep -oE '^[a-z]+-' | sort -u || true)"

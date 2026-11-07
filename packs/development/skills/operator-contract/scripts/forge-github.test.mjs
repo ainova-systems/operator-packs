@@ -301,7 +301,7 @@ test('every option the command line reads is a known flag, so a missing value is
   assert.deepEqual([...used].filter((flag) => !FLAGS.has(flag)), []);
 });
 
-test('every answer holds the forge contract shape the operator pack checks', () => {
+test('every answer holds the forge contract shape the development pack checks', () => {
   const thread = JSON.stringify({ id: 'T1', isResolved: false, path: 'a.ts', line: 3, comments: { nodes: [{ author: { login: 'r' }, body: 'fix', createdAt: 't' }] } });
   const conversation = { number: 7, comments: [{ id: 'c1', author: { login: 'o' }, authorAssociation: 'OWNER', body: 'x', createdAt: 't', url: 'u' }], reviews: [] };
   const answers = {

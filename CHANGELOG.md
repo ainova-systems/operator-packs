@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-07
+
+Clarification is its own flow and its own pack.
+
+### Changed
+
+- `operator-clarify` moved from the development pack to the new `@ainova-systems/operator-clarification` (`packs/clarification`). It builds on the development pack: the run contract, forge script, state labels and profile keys stay there, so install both. The skill itself is unchanged.
+- The validator checks a pack without its own profile schema against the schema and label page of the pack holding `operator-contract`.
+
+**Updating:** a project that runs clarification adds the pack, then syncs:
+
+```bash
+intelligence package add @ainova-systems/operator-development@^0.15.0
+intelligence package add @ainova-systems/operator-clarification@^0.15.0
+```
+
+- In `intelligence.yaml` `sources.skills`, add `.intelligence/packages/@ainova-systems/operator-clarification/skills`.
+- Run `intelligence sync`.
+
 ## [0.14.0] - 2026-11-07
 
 Packs are named after the flow they run, so later flows sit beside this one.

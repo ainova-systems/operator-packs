@@ -18,4 +18,8 @@ packages:
   "@ainova-systems/operator-development":
     url: "https://github.com/ainova-systems/operator-packs.git"
     path: "packs/development"
-    description: "Phase skills the Operator runtime runs: intake, plan, implement, review, verify, merge and clarify, each also runnable by hand, plus the forge contract and its GitHub implementation. Core recommended, optional via profile keys."
+    description: "Phase skills the Operator runtime runs for pull-request delivery: intake, plan, implement, review, verify and merge, each also runnable by hand, plus the run contract, the forge contract and its GitHub implementation. Core recommended, optional via profile keys."
+  "@ainova-systems/operator-clarification":
+    url: "https://github.com/ainova-systems/operator-packs.git"
+    path: "packs/clarification"
+    description: "The clarification flow: settles queue items waiting on an owner decision, one question at a time in a documentation pull request. Builds on @ainova-systems/operator-development."

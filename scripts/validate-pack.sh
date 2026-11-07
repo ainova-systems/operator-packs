@@ -13,7 +13,8 @@
 # - each pack's profile schema and its artifacts agree: no schema key nothing reads,
 #   no key an artifact reads that neither its pack's schema nor core's defines.
 # A pack with its own schema (templates/<prefix>-project-profile.md) stands alone: its checks
-# read only its own folder, plus core's schema and artifacts when core is present. The core
+# read only its own folder, plus core's schema and artifacts when core is present. A pack without
+# one builds on the pack holding operator-contract and reads that pack's schema and label page. The core
 # pack lives in intelligence-dev-packs, so here every pack checks on its own.
 # Zero dependencies: bash + awk + grep.
 
@@ -136,13 +137,15 @@ fi
 [ "$pack_count" -gt 0 ] || fail "no packs found under packs/"
 
 # One source per convention (dev-context-engineering): the ai:* label vocabulary is
-# defined once per pack and only cited elsewhere - core's git-workflow rule, or a pack's own
-# pr-state page when it ships one, so that pack checks without core. A label an artifact
+# defined once and only cited elsewhere - a pack's own pr-state page when it ships one, else the
+# page of the pack holding the operator contract, else core's git-workflow rule. A label an artifact
 # uses but its definition site never names is a second definition site - the failure mode
 # that recurred three times before this check existed.
 label_rule_for() {
     local own="$1skills/operator-contract/references/pr-state.md"
-    if [ -f "$own" ]; then echo "$own"; else echo "$PACKS_DIR/core/rules/git-workflow.md"; fi
+    local base
+    base="$(find "$PACKS_DIR" -path '*/skills/operator-contract/references/pr-state.md' | head -n 1 || true)"
+    if [ -f "$own" ]; then echo "$own"; elif [ -n "$base" ]; then echo "$base"; else echo "$PACKS_DIR/core/rules/git-workflow.md"; fi
 }
 for pack_dir in "$PACKS_DIR"/*/; do
     [ -d "$pack_dir" ] || continue
@@ -203,6 +206,18 @@ schema_default() {
 }
 core_keys="$(schema_keys_of "$CORE_SCHEMA")"
 core_readers=""
+# The pack holding the operator contract (operator-contract) is the base of every other operator
+# pack here: a pack without a schema of its own reads the base's keys, and its reads keep them alive.
+BASE_DIR="$(find "$PACKS_DIR" -mindepth 3 -maxdepth 3 -type d -path '*/skills/operator-contract' | head -n 1 | sed 's|/skills/operator-contract$|/|' || true)"
+BASE_SCHEMA="$( [ -n "$BASE_DIR" ] && find "$BASE_DIR" -path '*/templates/*-project-profile.md' | head -n 1 || true)"
+base_keys="$(schema_keys_of "$BASE_SCHEMA")"
+base_readers=""
+for pack_dir in "$PACKS_DIR"/*/; do
+    [ -d "$pack_dir" ] || continue
+    [ "$pack_dir" = "$BASE_DIR" ] && continue
+    [ -z "$(find "$pack_dir" -path '*/templates/*-project-profile.md' | head -n 1)" ] || continue
+    base_readers="$base_readers $(find "$pack_dir" -type f -name '*.md' | tr '\n' ' ')"
+done
 for pack_dir in "$PACKS_DIR"/*/; do
     [ -d "$pack_dir" ] || continue
     pack="$(basename "$pack_dir")"
@@ -212,6 +227,7 @@ for pack_dir in "$PACKS_DIR"/*/; do
     [ -n "$schema" ] || core_readers="$core_readers $files"
     [ "$pack" = core ] && core_readers="$core_readers $files"
     own_keys="$(schema_keys_of "$schema")"
+    [ -n "$schema" ] || own_keys="$base_keys"
     allowed="$own_keys"
     [ "$pack" = core ] || allowed="$(printf '%s\n%s\n' "$own_keys" "$core_keys" | sort -u)"
     read_keys="$(grep -rhoE 'profile `[a-z_]+' $files /dev/null | sed 's/profile `//' | sort -u || true)"
@@ -220,8 +236,10 @@ for pack_dir in "$PACKS_DIR"/*/; do
             || fail "[$pack] profile key '$key' is read but defined in neither its pack's schema nor core's"
     done
     [ -n "$schema" ] && [ "$pack" != core ] || continue
+    readers="$files"
+    [ "$pack_dir" = "$BASE_DIR" ] && readers="$files $base_readers"
     for key in $own_keys; do
-        grep -qhE "\`$key[\`:]" $files /dev/null \
+        grep -qhE "\`$key[\`:]" $readers /dev/null \
             || fail "[$pack] profile key '$key' is defined in $(basename "$schema") but no artifact of the pack reads it"
         if grep -qx "$key" <<< "$core_keys"; then
             [ "$(schema_default "$schema" "$key")" = "$(schema_default "$CORE_SCHEMA" "$key")" ] \

@@ -8,9 +8,10 @@ Built and maintained by [Ainova Systems](https://www.ainovasystems.com).
 
 | Pack | Scenario | Contents |
 |---|---|---|
-| **development** (`operator-`)<br>`@ainova-systems/operator-development` | Pull-request delivery: a work-queue item through intake, plan, implementation rounds, review, QA verification, the owner's accept and merge, plus clarification of items waiting on an owner decision | 8 skills: the run contract and the phase skills the runtime runs (intake, plan, implement, review, verify, merge, clarify); the forge contract, its contract test and its GitHub implementation (`forge-github.mjs`, a script, not a skill); its own profile-key schema (`templates/operator-project-profile.md`) |
+| **development** (`operator-`)<br>`@ainova-systems/operator-development` | Pull-request delivery: a work-queue item through intake, plan, implementation rounds, review, QA verification, the owner's accept and merge, | 7 skills: the run contract and the phase skills the runtime runs (intake, plan, implement, review, verify, merge); the forge contract, its contract test and its GitHub implementation (`forge-github.mjs`, a script, not a skill); its own profile-key schema (`templates/operator-project-profile.md`) |
+| **clarification** (`operator-`)<br>`@ainova-systems/operator-clarification` | Clarification: a queue item waiting on an owner decision is settled one question at a time in a documentation pull request, then merged | 1 skill: `operator-clarify`; builds on the development pack's contract, forge script and profile keys |
 
-The pack's own guide - milestones, the flow, clarification and what the owner does - is [`packs/development/README.md`](packs/development/README.md).
+Each pack's own guide is its `README.md`: [development](packs/development/README.md) (milestones, the flow and what the owner does) and [clarification](packs/clarification/README.md).
 
 ## Install
 
@@ -25,6 +26,7 @@ cd your-project
 intelligence init --targets claude              # claude, cursor, copilot, codex, pi, opencode
 intelligence registry add https://github.com/ainova-systems/operator-packs.git
 intelligence package add @ainova-systems/operator-development
+intelligence package add @ainova-systems/operator-clarification   # optional: the clarification flow, on top of development
 ```
 
 `init` writes `intelligence.yaml` and `intelligence.lock` - both committed - and renders each enabled tool's native files. `registry add` is what makes this repository's package names resolvable: names resolve only through registries the project has explicitly trusted, so nothing installs from a guessed URL. `package add` records the name and pins the resolved tag and commit in the lock.

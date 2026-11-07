@@ -36,7 +36,6 @@ queue item in one session instead of phase by phase.
 | `operator-verify` | `verification` (Verification) | profile `verify_skill` passed and profile `outcome_skill` wrote `ai:completed` |
 | - (the owner) | `humanReview` (Human Review) | feedback returns it to Verification; `owner:accepted` sends it to merge |
 | `operator-merge` | `mergeQueue` (Merge Queue) | merged |
-| `operator-clarify` | a queue item waiting on an owner decision → `clarification` (Clarification) → `mergeQueue` → merged | the item is ready with every owner answer recorded |
 
 ## Profile keys
 
@@ -93,15 +92,8 @@ sequenceDiagram
 
 ## Clarification
 
-A queue item waiting on an owner decision is never picked by intake, so without help the most
-important work waits longest. Discovery ranks those items (the owner's `clarifyFirst: true` first,
-then `flow_queue` folder order, priority and how many items wait on each) and, whenever a
-clarification slot is free, offers the top ones to `operator-clarify`. It picks one, plans the answer
-from the repository first, then asks the owner one question at a time in a draft documentation pull
-request, recording each answer in the documents. A settled item is ready; its `## Clarification - READY` report at the head is the authorization,
-so the PR goes to Merge Queue and the same operation merges it once CI decides, without another
-owner review, when every path it changes matches profile `direct_lane` (unset: the owner merges it). The PR body follows the skill's own short template (Task, Approach, Open questions). Clarification slots never take
-delivery work, and delivery slots never clarify.
+Queue items waiting on an owner decision are settled by the separate clarification pack
+(`@ainova-systems/operator-clarification`), which builds on this pack's contract.
 
 ## What the owner does
 

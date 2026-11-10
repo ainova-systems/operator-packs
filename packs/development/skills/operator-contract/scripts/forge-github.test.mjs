@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  FLAGS, authorRole, checkOperatorConfig, checks, ciFromRuns, claim, comment, createPr, draftPr, editPr, events, execute, factor, listPrs, merge, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readUnresolvedThreads, readyPr, renameBranch, resolveThread, threads, viewPr,
+  FLAGS, authorRole, gh, isRead, checkOperatorConfig, checks, ciFromRuns, claim, comment, createPr, draftPr, editPr, events, execute, factor, listPrs, merge, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readUnresolvedThreads, readyPr, renameBranch, resolveThread, threads, viewPr,
 } from './forge-github.mjs';
 import { assertShape } from './forge-contract.mjs';
 
@@ -424,4 +424,36 @@ test('a flag the subcommand does not read is a usage error, never silently ignor
   const cli = spawnSync('node', [SCRIPT, 'pr', 'edit', '7', '--milestone', 'Verification', '--titel', 'x'], { encoding: 'utf8' });
   assert.equal(cli.status, 2);
   assert.match(cli.stderr, /does not take --titel/);
+});
+
+test('gh asks a read again after a network fault, and never repeats a write', () => {
+  const fault = (stderr) => Object.assign(new Error('Command failed'), { stderr });
+  const flaky = (failures, stderr) => {
+    const calls = [];
+    return { calls, exec: (_bin, args) => { calls.push(args); if (calls.length <= failures) throw fault(stderr); return 'ok'; } };
+  };
+  const waits = [];
+  const wait = (ms) => waits.push(ms);
+
+  const read = flaky(2, 'read tcp: read: connection reset by peer\n');
+  assert.equal(gh(['pr', 'list', '--json', 'number'], { exec: read.exec, wait }), 'ok');
+  assert.equal(read.calls.length, 3);
+  assert.deepEqual(waits, [2000, 4000]);
+
+  const down = flaky(5, 'Post "https://api.github.com/graphql": net/http: TLS handshake timeout\n');
+  assert.throws(() => gh(['api', 'graphql', '-f', 'query=query{viewer{login}}'], { exec: down.exec, wait }), /Command failed/);
+  assert.equal(down.calls.length, 3);
+
+  const write = flaky(1, 'read: connection reset by peer');
+  assert.throws(() => gh(['pr', 'comment', '7', '--body-file', 'b.md'], { exec: write.exec, wait }));
+  assert.equal(write.calls.length, 1);
+
+  const answer = flaky(1, 'GraphQL: Could not resolve to a PullRequest');
+  assert.throws(() => gh(['pr', 'view', '7'], { exec: answer.exec, wait }));
+  assert.equal(answer.calls.length, 1);
+});
+
+test('isRead tells reads from writes', () => {
+  for (const args of [['pr', 'list'], ['pr', 'view', '1'], ['run', 'list'], ['api', 'repos/{owner}/{repo}/issues/1/events'], ['api', 'graphql', '-f', 'query=query($id:ID!){node(id:$id){id}}']]) assert.equal(isRead(args), true, args.join(' '));
+  for (const args of [['pr', 'edit', '1'], ['pr', 'comment', '1'], ['pr', 'merge', '1'], ['pr', 'ready', '1'], ['api', '-X', 'POST', 'x'], ['api', 'x', '-f', 'a=b'], ['api', 'graphql', '-f', 'query=mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id}}}']]) assert.equal(isRead(args), false, args.join(' '));
 });

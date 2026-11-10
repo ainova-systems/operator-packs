@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Profile key `judge_fallback` (development pack): `native` lets a fresh read-only subagent of the session's own engine run a judging stage while the `judge_runner` engine is unavailable, instead of failing the run until it returns; the report names the engine that judged.
+- Profile key `judge_fallback` (development pack): `native` lets a fresh subagent of the session's own engine run a judging stage a skill runs through `judge_runner` (verification, and review by hand) while that engine is unavailable, instead of failing the run until it returns; the report names the engine that judged. The runtime's `review` job follows its manifest `fallback`.
 
 ## [0.15.0] - 2026-11-07
 

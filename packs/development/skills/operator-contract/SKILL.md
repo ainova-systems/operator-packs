@@ -81,7 +81,7 @@ End by writing exactly one JSON file at the result path:
 | `done` | the work happened | `evidence`: stage comment URL, commit SHA, PR URL |
 | `noop` | nothing to do now: the state had already moved, the owner paused it, or what the run needs has not happened yet (CI, a QA deployment, a QA slot); discovery asks again when that state changes | `message` with the reason |
 | `needs-input` | an owner question was asked (below) | `wait` |
-| `failed` | the work could not be done; an engine that is unavailable is `retryable: true`, and the manifest's `retries` bring the run back | `failure: { "reason", "retryable" }` |
+| `failed` | the work could not be done; an engine that is unavailable is `retryable: true` (unless profile `judge_fallback` lets a judging stage go on, Judging stages), and the manifest's `retries` bring the run back | `failure: { "reason", "retryable" }` |
 
 - Exit 0 without a valid result file is a failure; a result is never skipped.
 - The runtime's `waiting` status is a wait for a named trigger and needs a `wait`; these skills use
@@ -222,11 +222,19 @@ input starts the phase operation again.
 Profiles `review_skill` and `verify_skill` run where profile `judge_runner` says: `none` (or unset) runs
 them in this session; a skill name runs them through that skill in another engine,
 read-only, and the operator skill posts the report unchanged and writes the factor its verdict earns.
-An engine that is unavailable (a usage limit, a lost login) ends the run `failed` with
-`retryable: true`, unless profile `judge_fallback` is `native`: then a fresh subagent of this
-session's own engine runs the stage instead - read-only, with only the stage's input, never the
-context of the session that wrote the change - and the report's findings open with one line saying
-which engine judged and why. Its verdict earns the factor like any other.
+An engine that is unavailable - it cannot start or cannot finish the stage for a reason outside the
+change: a usage limit, a lost login, not installed, an outage - ends the run `failed` with
+`retryable: true`, unless profile `judge_fallback` is `native` (irrelevant when `judge_runner` is
+`none`): then a fresh subagent of this session's own engine runs the same stage on the same inputs the
+engine would have had - the diff, body and pull request for a review; the steps, the QA deployment and
+the head for a verification - with the same write limits (none for a review, the scratch folder for a
+verification), never the context of a session that wrote the change. A partial or malformed answer
+from the unavailable engine is discarded, not reused. The envelope and verdicts are unchanged; the
+subagent writes one line right after the `head:` line naming the engine that judged and why. Its
+verdict earns the factor like any other, though a judgment from the engine that wrote the change is
+weaker than one from another engine. In the runtime the `review` job is the manifest's: its own
+`fallback` decides who reviews when its engine is unavailable, and `operator-review` posts what it
+produced; this key governs every judging stage a skill runs through `judge_runner`, by hand included.
 
 The runtime's review job writes its findings file (`input.output`) as JSON:
 

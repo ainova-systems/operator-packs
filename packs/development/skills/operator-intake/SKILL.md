@@ -25,9 +25,8 @@ the `operator-contract` skill first: input, result, claim and markers follow it.
    outranks rejection; without either label, `noop`. Require a clean slot; preserve foreign work.
    With `input.handoff`, adopt that pull request instead (step 7).
 2. **Read the queue.** For `queue`, run profile `sync_base_skill` (default `git-sync-base`), then re-read all open PRs, their queue
-   references and changed files (profile `forge_cli pr list` and `pr files <n>`). Check that `<slot>` is free: no open PR in a pipeline milestone has a branch naming it
-   (`operator_config` `slots` lists the slots; a PR holds its slot from intake until it merges or
-   closes). Read candidates on the freshly fetched integration branch,
+   references and changed files (profile `forge_cli pr list` and `pr files <n>`). Check that `<slot>` is free: no open PR in a pipeline milestone has it as its slot
+   (`operator_config` `slots` lists the slots; `operator-contract` > The slot stays with its pull request). Read candidates on the freshly fetched integration branch,
    in the order profile `flow_queue` defines, with its eligibility rules; never rerank what it
    orders. When `operator_config` sets `quotas`, count the open pipeline PRs per source from their
    linked queue items and skip every candidate of a source already at its limit. A pull request a clarification slot holds
@@ -74,18 +73,18 @@ the `operator-contract` skill first: input, result, claim and markers follow it.
    pull request so the pipeline finishes it: work a manual session already clarified, or an attempt
    another agent left short of its requirements. The adoption keeps every commit and decision it
    carries and changes no code; plan revises its scope from what the pull request already settles.
-   The label means the hand-over is done: nobody pushes to the old branch name after it.
+   The label means the hand-over is done: only the pipeline pushes to its branch after it.
    - Re-read it (profile `forge_cli pr view <n>`): require OPEN, `input.head`, the hand-off label,
      and none of `owner:onhold`, `owner:cancelled`, `owner:rejected`; anything else ends `noop` with
      the reason. It may sit in any milestone, Merge Queue included: the owner handed it back on
      purpose, and it returns to the queue milestone; its factors are left to the freshness rules.
      Quotas and the conflict gate do not apply, because the owner chose it. Check the slot is still
      free of other pull requests.
-   - Bind it to the slot first, while nothing else has changed: unless its slot is already `<slot>`
+   - Bind it to the slot first, while nothing else has changed: unless its latest slot comment already names `<slot>`
      (`operator-contract` > The slot stays with its pull request), post one comment
      (`forge_cli comment`) saying the pipeline adopted it into `<slot>`, whose last lines are
      `<!-- operator:slot <slot> -->` and the note marker. Its branch keeps its name: the platform
-     closes a pull request whose head branch is renamed. A retry finds the comment and posts none.
+     closes a pull request whose head branch is renamed. A retry finds that comment and posts none.
    - Then one claim edit makes it an ordinary queue pull request: `forge_cli pr edit <n> --claim
      --milestone "<queue title>" --remove-label <hand-off label>`, also removing any terminal state
      label an earlier run left and `labels.accepted` (the owner handed it back, so no acceptance

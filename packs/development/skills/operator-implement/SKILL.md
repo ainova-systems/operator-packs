@@ -108,5 +108,6 @@ instead of handing the head to the runtime, and posts its report, label and body
 ## Constraints
 
 - In the runtime the review is the `review` job, posted by `operator-review`: never a reviewer of
-  this session's own, and no stand-in when its engine is unavailable.
+  this session's own; when its engine is unavailable the manifest's `fallback` decides, never this
+  session. By hand, step 5's review follows profile `judge_fallback` (`operator-contract` > Judging stages).
 - Fix forward; never revert or rewrite pushed work. Never award a factor, merge, or promote a draft.

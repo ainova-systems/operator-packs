@@ -69,7 +69,7 @@ head: <sha> [<other inputs the stage judged, e.g. the steps or body digest>]
 <findings>
 ```
 
-A gate reads a stage's latest report and compares every input it names with the current one.
+A gate reads a stage's latest report and compares every input it names with the current one. A stage judged by a stand-in engine (profile `judge_fallback`) opens its findings with one line naming that engine and why; the first two lines stay as above.
 
 | Report | Verdicts | Label |
 |---|---|---|

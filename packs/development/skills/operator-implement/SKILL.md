@@ -1,6 +1,6 @@
 ---
 name: operator-implement
-description: "Run one Development round for a pull request through the project's implementation skill, then hand the pushed head to review, or a complete, reviewed, green head to `verification`. Runs as the runtime's implement operation, or by hand."
+description: "Run one Development round for a pull request through the project's implementation skill, then hand the pushed head to review in `codeReview`, or a complete, reviewed, green head to `verification`. Runs as the runtime's implement operation, or by hand."
 argument-hint: "[PR number when run by hand; the runtime passes $OPERATOR_INPUT]"
 ---
 
@@ -13,10 +13,10 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
 
 | Contract | |
 |---|---|
-| Trigger | A PR in the development milestone with implementation, CI, review, verification or owner work pending; a PR in any later milestone that conflicts with the integration branch |
+| Trigger | A PR in the development milestone with implementation, CI, review, verification or owner work pending; a PR left in `codeReview` with no review running; a PR in any later milestone that conflicts with the integration branch |
 | Work | one `flow_implement` round ending at profile `commit_skill` (default `git-commit-push`); profile `threads_skill` (default: the Threads procedure of `git-complete-pr`) for review threads |
 | Evidence | pushed head SHA and PR URL |
-| Next | pushed or unreviewed → `review`; complete, reviewed and green → `verification`, `verify`; CI pending → `noop` |
+| Next | pushed or unreviewed → `codeReview`, `review`; complete, reviewed and green → `verification`, `verify`; CI pending → `noop` |
 
 ## Steps
 
@@ -108,7 +108,9 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
 
 `/operator-implement <n>`. Step 5 then runs profile `review_skill` (default `git-review-pr`) itself, through profile `judge_runner`,
 instead of handing the head to the runtime, and posts its report, label and body note as
-`operator-review` step 3 does; repeat until step 6 moves the PR on.
+`operator-review` step 3 does; repeat until step 6 moves the PR on. By hand no runtime review is
+coming, so step 5 leaves the PR in development, and step 1 takes a PR in `codeReview` without
+`input.reason`.
 
 ## Verify
 

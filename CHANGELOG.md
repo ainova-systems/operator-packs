@@ -7,13 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.18.0] - 2026-11-10
-
-A pull request in review says so: the review runs in its own milestone.
-
 ### Added
 
-- The `codeReview` milestone role. `operator-implement` hands a pushed head over by moving the pull request to it, and `operator-review` moves it on: to verification after a `CLEAN` review of a head handed over `final` (the plan complete, nothing left but review and CI), to development otherwise. A pull request in development without `ai:processing` now waits only between two runs; `operator-verify` waits for CI in verification and returns a red head to development, as before.
+- The `codeReview` milestone role. `operator-implement` hands a pushed head over by moving the pull request to it, and `operator-review` moves it on: to verification after a `CLEAN` review of a head handed over `final` (the plan complete, nothing left but review and CI), to development otherwise. A finished head therefore waits for CI in verification, where `operator-verify` already waits for it and returns a red head to development; before, it waited in development.
 - Discovery row 11a: a pull request left in `codeReview` with no job covering it asks `implement` (`reason: review`), which moves it back to development and hands its head to review again.
 
 **Updating:**

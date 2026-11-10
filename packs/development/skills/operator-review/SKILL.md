@@ -1,6 +1,6 @@
 ---
 name: operator-review
-description: "Post a finished runtime review of one pull request head as its review report, write ai:reviewed when it passes, then hand the PR back to implementation. Runs as the runtime's review-verdict operation."
+description: "Post a finished runtime review of one pull request head as its review report, write ai:reviewed when it passes, then move the PR from `codeReview` to development, or to verification after a clean review of a finished head. Runs as the runtime's review-verdict operation."
 argument-hint: "(runtime only; by hand run profile review_skill instead)"
 ---
 
@@ -69,6 +69,7 @@ Nothing to post without a runtime review: run profile `review_skill` through pro
 
 ## Constraints
 
-- One review comment per head and body: a report for this head already standing ends the run `noop`,
-  unless its passing note names another body digest than `input.body`'s.
+- One review comment per head and body: a report for this head already standing posts nothing again,
+  unless its passing note names another body digest than `input.body`'s; a PR still in `codeReview`
+  then goes straight to step 4, so a retry after a failed move finishes it.
 - No judgement of its own and no fixes here; fixes are `operator-implement`'s.

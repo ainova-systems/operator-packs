@@ -111,7 +111,7 @@ puts it in `input.qa` (`passed`, `pending`, `failed`, `none`), and asks for rows
 | `qa` | QA state | discovery | verify |
 | `milestone` | title | discovery | every phase skill |
 | `handoff` | number | discovery, a hand-off adoption (Queues) | intake |
-| `reason` | `conflict` \| `sendback` | discovery, rows 3-4 | implement, the send-back operation |
+| `reason` | `conflict` \| `sendback` \| `review` | discovery, rows 3-4 and 11a | implement, the send-back operation |
 | `label` | label name | discovery, row 4 | the send-back operation |
 | `staleClaim` | job id | discovery, stale claims | every phase skill (takeover) |
 | `step` | `select\|clarify\|revise\|close\|merge` | discovery, clarification | clarify |
@@ -119,6 +119,7 @@ puts it in `input.qa` (`passed`, `pending`, `failed`, `none`), and asks for rows
 | `evidence` | URL | `operator-verify`'s route back to development | implement |
 | `checkout` | absolute path | `operator-implement`'s `review` request | the review job, review-verdict |
 | `body` | absolute path | `operator-implement`'s `review` request: the PR body for the review to read | review-verdict (removes it) |
+| `final` | boolean | `operator-implement`'s `review` request: only review and CI stand between the head and verification | review-verdict |
 | `output` | absolute path | the review job: the findings file | review-verdict |
 | `question`, `reply` | id, URL | the runtime, resuming a wait | the asking skill |
 | `member` | slot name | the runtime, from the request's `member` (discovery sets it there, not in `input`) | intake, clarify, every slot-bound skill |

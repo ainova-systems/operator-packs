@@ -53,6 +53,8 @@ is the one most often unavailable, takes `retries: 4`. A retried run re-reads th
 
 - Discovery is `exclusive: true`: two passes at once would ask for the same work twice.
 - The review runs `access: read` in the pull request's own slot, at the head `implement` pushed.
+- `then: review-verdict` starts the verdict with the review job's own input plus `output`, so
+  `checkout`, `body` and `final` reach `operator-review` unchanged.
 - `kind: interactive` with `placement: herdr` lets the owner attend a session in a terminal tab;
   `kind: agent` runs headless. The example uses `agent` so it validates without herdr.
 - With the clarification pack: a pool of the slots `operator_config` `clarifySlots` names, and a

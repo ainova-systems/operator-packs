@@ -73,10 +73,11 @@ sequenceDiagram
 
     loop each round, until the plan is complete, reviewed and green
         RT->>C: operator-implement (flow_implement, commit_skill)
+        C->>GH: Code Review
         RT->>J: review_skill, read-only
         RT->>C: operator-review (report, ai:reviewed)
+        C->>GH: Development, or Verification after a clean final review
     end
-    C->>GH: Verification
 
     RT->>C: operator-verify
     C->>J: verify_skill on QA (judge_runner)

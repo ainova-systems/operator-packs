@@ -52,7 +52,7 @@ The prompt names the input file and the result path; the same paths are in `$OPE
   for intake and clarification (absent when run by hand: the checkout's own name gives it);
 - `subject` — `pr-<n>`, `queue` for intake, or `clarify-queue` for selecting an item to clarify;
 - `input` — pointers only: `pr`, `head`, `ci`, `milestone`; a review gets `checkout` (the slot it
-  judges) and `body` (a file holding the PR body), and its verdict also `output` (the findings file);
+  judges), `body` (a file holding the PR body) and `final`, and its verdict also `output` (the findings file);
   a fix sent back by verification gets `evidence`; a resumed question gets `question` and `reply` (a
   comment URL). Every field, its type and its producer: `references/discovery-contract.md` > The input;
 - `trigger` — what started the job (`kind` is `timer`, `next`, `resume` or `manual`).
@@ -113,8 +113,9 @@ A pull request's milestone names the phase that may take it. Skills name the mil
 their role in `operator_config` `milestones` - `queue`, `development`, `codeReview`,
 `verification`, `humanReview`, `mergeQueue`, and `clarification` for a clarification slot's pull request - and read the project's title for each role there before comparing or
 setting one; a title is never written into a skill. `codeReview` holds a pull request while the
-runtime reviews its head and `operator-review` posts the verdict, so a pull request in `development`
-without `ai:processing` waits only between two runs. A conflict with the integration branch returns a
+runtime reviews its head and `operator-review` posts the verdict, and a finished head waits for CI in
+`verification`; a pull request in `development` without `ai:processing` waits between two runs, or
+for CI after a clean review of an unfinished head. A conflict with the integration branch returns a
 pull request in any later milestone to `development`; a `sendBack` label from `operator_config`
 sends it to the operation named there, which returns it to `development`.
 

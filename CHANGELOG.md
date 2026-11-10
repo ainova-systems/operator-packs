@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-10
+
+A judging stage can go on while its engine is unavailable.
+
 ### Added
 
 - Profile key `judge_fallback` (development pack): `native` lets a fresh subagent of the session's own engine run a judging stage a skill runs through `judge_runner` (verification, and review by hand) while that engine is unavailable, instead of failing the run until it returns; the report names the engine that judged. The runtime's `review` job follows its manifest `fallback`.

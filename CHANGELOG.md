@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-11-10
+
 ### Fixed
 
 - Profile `sync_base_skill` defaults to core's `git-to-base`, the name core 0.17.0 gave `git-sync-base`; with the old default, intake, merge and clarification called a skill core no longer ships.

@@ -455,5 +455,5 @@ test('gh asks a read again after a network fault, and never repeats a write', ()
 
 test('isRead tells reads from writes', () => {
   for (const args of [['pr', 'list'], ['pr', 'view', '1'], ['run', 'list'], ['api', 'repos/{owner}/{repo}/issues/1/events'], ['api', 'graphql', '-f', 'query=query($id:ID!){node(id:$id){id}}']]) assert.equal(isRead(args), true, args.join(' '));
-  for (const args of [['pr', 'edit', '1'], ['pr', 'comment', '1'], ['pr', 'merge', '1'], ['pr', 'ready', '1'], ['api', '-X', 'POST', 'x'], ['api', 'x', '-f', 'a=b'], ['api', 'graphql', '-f', 'query=mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id}}}']]) assert.equal(isRead(args), false, args.join(' '));
+  for (const args of [['pr', 'edit', '1'], ['pr', 'comment', '1'], ['pr', 'merge', '1'], ['pr', 'ready', '1'], ['api', '-X', 'POST', 'x'], ['api', 'x', '-f', 'a=b'], ['api', 'graphql', '-f', 'query=mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id}}}'], ['api', '--method=POST', 'x'], ['api', '-XPOST', 'x'], ['api', 'graphql', '-f', 'query=# reply\nmutation{x}']]) assert.equal(isRead(args), false, args.join(' '));
 });

@@ -15,11 +15,12 @@ operation of `operator.yaml`. Load the `operator-contract` skill first.
 | Trigger | The runtime's `review` job finished; `input.output` is its findings file at `input.head`, `input.checkout` the PR's slot it judged |
 | Work | post the report unchanged; `ai:reviewed` and the body note when no Critical stands |
 | Evidence | the `## Code review - …` comment at `head:` |
-| Next | `implement` as discovery asks it: on findings, owner input or decided CI, never while CI runs after a clean review; it acts on findings or hands a complete, reviewed, green head to `verification` |
+| Next | a `CLEAN` review of a head handed over `final` → `verification`; otherwise `development`, where `implement` runs as discovery asks it: on findings, owner input or decided CI, never while CI runs after a clean review |
 
 ## Steps
 
-1. **Re-check the head.** The PR must be open, in the development milestone, without
+1. **Re-check the head.** The PR must be open, in the `codeReview` milestone (or `development`, for a
+   head an earlier `operator-implement` handed over there), without
    `owner:onhold` or another run's `ai:processing` (a HELD report, `operator-contract`), and its head must equal `input.head` and the
    findings file's `head`. Anything else ends `noop`: a moved head has its own review coming.
 2. **Claim the PR in its slot**, which stands on the PR branch at that head once reconciled
@@ -34,11 +35,16 @@ operation of `operator.yaml`. Load the `operator-contract` skill first.
    during the review, leaves it stale (`operator-contract` > `references/pr-state.md`). Unless that
    call exits 0 with exactly one 12-hexadecimal-character digest on stdout, the digest is not
    available: no note and no failure, the result says so, and the review stays fresh by head alone.
-4. **Hand back to implementation** whatever the verdict: drop `ai:processing` and end `done` with
-   the hand-off request (`operator-contract`). Discovery asks implementation for a head with
-   findings, owner input or CI that has decided, and for nothing while CI still runs after a clean
-   review. Only implementation knows whether every planned slice has shipped, so it owns the move
-   to `verification`.
+4. **Hand the PR on** in one edit that drops `ai:processing`, and end `done` with the hand-off
+   request (`operator-contract`):
+   - to the verification milestone when the verdict is `CLEAN` with no finding, `input.final` is true,
+     no review thread is unresolved (profile `forge_cli threads <n> --unresolved`) and no owner input
+     follows the report (profile `operator_discover --owner-input <n>`): the head is finished, and
+     `operator-verify` waits for CI and QA, returning it to development when either fails;
+   - otherwise to the development milestone. Discovery asks implementation for a head with
+     findings, owner input or CI that has decided, and for nothing while CI still runs after a clean
+     review. Only implementation knows whether every planned slice has shipped, so the move to
+     verification here rests on its `final`.
 5. **Remove the body file** (`input.body`) once the report is posted or the run ends `noop`; the slot
    stays on the PR branch (`operator-contract`).
 
@@ -52,10 +58,13 @@ Nothing to post without a runtime review: run profile `review_skill` through pro
 - The `## Code review` comment names the head it judged, and `ai:reviewed` stands only when no
   Critical finding does; a pass carries the `operator:reviewed` note whenever discovery answers
   `--body-digest`.
+- The pull request left `codeReview`: for verification only on a `CLEAN` review of a `final` head
+  with no unresolved thread or owner input, for development otherwise.
 
 ## Scope / hand-off
 
-- Fixes and the move to verification belong to `operator-implement`; the review procedure itself
+- Fixes belong to `operator-implement`, and so does the move to verification of a head not handed
+  over `final`; the review procedure itself
   is profile `review_skill`.
 
 ## Constraints

@@ -10,7 +10,7 @@ The forge script refuses a file without these, naming the missing key (exit 2).
 
 | Key | Shape | Meaning |
 |---|---|---|
-| `milestones` | `{ queue, development, verification, humanReview, mergeQueue }`, each a milestone title | The milestone for each phase role; `clarification` too when `clarifySlots` is set |
+| `milestones` | `{ queue, development, codeReview, verification, humanReview, mergeQueue }`, each a milestone title | The milestone for each phase role; `clarification` too when `clarifySlots` is set |
 | `labels` | `{ processing, accepted, onhold, revalidate, rejected, cancelled, question }`, each a label name | The label for each role; the defaults below are the names the skills show |
 | `allowedAuthors` | array of author associations (on GitHub `OWNER`, `MEMBER`, `COLLABORATOR`) | Who may speak for the project: their unmarked comments are owner input; `OWNER` reads as the owner, the rest as members |
 | `slots` | non-empty array of slot names | The agent slots delivery runs in; a pull request's slot is the one its slot comment names, else its branch (`operator-contract` > The slot stays with its pull request) |

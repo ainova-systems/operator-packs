@@ -20,13 +20,15 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
 
 ## Steps
 
-1. **Re-check the PR.** Require OPEN and the development milestone, or `input.reason: conflict` with
+1. **Re-check the PR.** Require OPEN and the development milestone, or the `codeReview` milestone with
+   `input.reason: review` (discovery found its review chain stopped), or `input.reason: conflict` with
    the live PR still conflicting with the integration branch (profile `forge_cli pr view <n>`: `mergeable` reads `conflicting`), in
    any later milestone. A moved `input.head`, `owner:onhold`, or another run's `ai:processing` (a HELD report, `operator-contract`) ends
    `noop` (a stopped run's claim is taken over, `operator-contract`); rejected and cancelled attempts
    belong to intake. So does an `ai:manual` or `ai:failed` no owner input follows (profile
    `operator_discover --owner-input <n>` lists none after its `## Outcome` report): it waits for the owner.
-2. **Claim the PR in its slot.** A conflicting PR from a later milestone moves back to the
+2. **Claim the PR in its slot.** A PR in `codeReview` moves back to the development milestone in
+   the claim edit, and step 5 hands its head to review again. A conflicting PR from a later milestone moves back to the
    development milestone in the claim edit, removing an obsolete `ai:completed`: the merged head is
    reviewed and verified again on its way back. The claim edit also removes an `ai:manual` or
    `ai:failed` the owner has answered. Reconcile the slot with the live head
@@ -73,8 +75,14 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
    is the one that moves on. The review judges the slot itself, read-only: leave it clean at the
    head (`git status --porcelain` empty, HEAD equal to the live head) and write the live PR body
    beside the checkout, profile `forge_cli pr body <n> > <slot-root>.review/pr-<n>-<head>.body.md`.
-   Release the claim and end `done` with `next: review`, subject `pr-<n>`, input
-   `{ pr, head, checkout: <slot root, absolute>, body: <absolute path> }`, and key `review:<head>:oe-<id>`,
+   Hand the PR over in one edit that moves it to the `codeReview` milestone and drops the claim
+   (profile `forge_cli pr edit <n> --milestone "<codeReview title>" --remove-label ai:processing`), so
+   the pull request shows its review running. When nothing but the review and CI stands between this
+   head and step 6 - the plan complete, no unresolved thread, no owner input this round left open -
+   the same edit sets step 6's title (`--title "<title>"`), and the input carries `final: true`: a
+   clean review then moves the head to verification itself (`operator-review`). End `done` with
+   `next: review`, subject `pr-<n>`, input
+   `{ pr, head, checkout: <slot root, absolute>, body: <absolute path>, final }`, and key `review:<head>:oe-<id>`,
    where `<id>` is the latest `owner:*` label event on the PR (profile `forge_cli events <n>`,
    `none` when there is none): a review that a
    pause interrupted is then asked for again. When this round pushed nothing because the review
@@ -104,7 +112,8 @@ instead of handing the head to the runtime, and posts its report, label and body
 
 ## Verify
 
-- After a round the pushed head is the pull request's head and the result asks for `review` at it.
+- After a round the pushed head is the pull request's head, the pull request sits in `codeReview`,
+  and the result asks for `review` at it.
 - A move to verification happens only with a review report at the head with no Critical finding,
   every declared factor fresh and CI green on that head.
 - No round ran past the budget; a spent one left an `## Outcome` report naming it.

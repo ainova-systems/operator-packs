@@ -48,6 +48,7 @@ already covers is skipped.
 | 9 | `accepted`, in `humanReview`/`mergeQueue` | `merge` | `merge:<head>:…` |
 | 10 | `queue` | `plan` | `plan:<head>:<owner input>` |
 | 11 | `development`; skip while CI runs after a `CLEAN` review of this head with no newer owner input and no unresolved thread, and while `ai:manual` or `ai:failed` stands with no owner input after its `## Outcome` report (waiting for the owner) | `implement` | `implement:<head>:<ci>:<owner input>:<latest stage report id>` |
+| 11a | `codeReview` (a job covering it is skipped above, so the review chain stopped) | `implement`, `reason: review` | `review-lost:<head>:<ci>:<owner input>:<latest stage report id>` |
 | 12 | `verification`, draft: only the oldest draft, only while fewer than `readyLimit` PRs are ready | `verify` (it promotes) | `admit:<head>:<ready count>` |
 | 13 | `verification`, ready: skip while CI runs and QA does not serve this head yet | `verify` | `verify:<head>:<ci>:qa-<state>:…` |
 | 14 | `humanReview` or `mergeQueue` otherwise | skip (waiting for the owner) | - |

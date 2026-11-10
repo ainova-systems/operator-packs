@@ -72,7 +72,7 @@ export function operatorConfig(path = process.env.OPERATOR_CONFIG) {
 }
 
 const REQUIRED_ROLES = {
-  milestones: ['queue', 'development', 'verification', 'humanReview', 'mergeQueue'],
+  milestones: ['queue', 'development', 'codeReview', 'verification', 'humanReview', 'mergeQueue'],
   labels: ['processing', 'accepted', 'onhold', 'revalidate', 'rejected', 'cancelled', 'question'],
 };
 

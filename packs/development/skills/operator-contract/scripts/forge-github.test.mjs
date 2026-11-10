@@ -357,6 +357,7 @@ test('the example configuration is complete, and a missing required key is refus
   const without = (mutate) => { const copy = structuredClone(EXAMPLE); mutate(copy); return copy; };
   assert.throws(() => checkOperatorConfig(without((c) => delete c.labels.processing)), /missing required key labels\.processing/);
   assert.throws(() => checkOperatorConfig(without((c) => delete c.milestones.mergeQueue)), /missing required key milestones\.mergeQueue/);
+  assert.throws(() => checkOperatorConfig(without((c) => delete c.milestones.codeReview)), /missing required key milestones\.codeReview/);
   assert.throws(() => checkOperatorConfig(without((c) => delete c.milestones.clarification)), /missing required key milestones\.clarification/);
   assert.throws(() => checkOperatorConfig(without((c) => { c.slots = []; })), /missing required key slots/);
   const path = join(CONFIG_DIR, 'incomplete.json');

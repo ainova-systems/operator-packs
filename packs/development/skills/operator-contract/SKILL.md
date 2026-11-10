@@ -110,9 +110,11 @@ Model, effort and retries per operation, and a reference manifest: `references/r
 ## Milestones
 
 A pull request's milestone names the phase that may take it. Skills name the milestones by
-their role in `operator_config` `milestones` - `queue`, `development`, `verification`,
-`humanReview`, `mergeQueue`, and `clarification` for a clarification slot's pull request - and read the project's title for each role there before comparing or
-setting one; a title is never written into a skill. A conflict with the integration branch returns a
+their role in `operator_config` `milestones` - `queue`, `development`, `codeReview`,
+`verification`, `humanReview`, `mergeQueue`, and `clarification` for a clarification slot's pull request - and read the project's title for each role there before comparing or
+setting one; a title is never written into a skill. `codeReview` holds a pull request while the
+runtime reviews its head and `operator-review` posts the verdict, so a pull request in `development`
+without `ai:processing` waits only between two runs. A conflict with the integration branch returns a
 pull request in any later milestone to `development`; a `sendBack` label from `operator_config`
 sends it to the operation named there, which returns it to `development`.
 

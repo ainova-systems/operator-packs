@@ -10,3 +10,6 @@ CLAUDE.md
 !.claude/
 !.claude/settings.json
 intelligence/_backup/
+intelligence/rules/*.local.md
+intelligence/agents/*.local.md
+intelligence/skills/*.local/

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  FLAGS, authorRole, gh, isRead, checkOperatorConfig, checks, ciFromRuns, claim, comment, createPr, draftPr, editPr, events, execute, factor, listPrs, merge, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readUnresolvedThreads, readyPr, renameBranch, resolveThread, threads, viewPr,
+  FLAGS, authorRole, gh, isRead, checkOperatorConfig, checks, ciFromRuns, claim, comment, createPr, draftPr, editPr, events, execute, factor, listPrs, merge, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readUnresolvedThreads, readyPr, resolveThread, threads, UsageError, viewPr,
 } from './forge-github.mjs';
 import { assertShape } from './forge-contract.mjs';
 
@@ -226,7 +226,6 @@ test('the command line dispatches every subcommand to its function', () => {
   assert.equal(execute(['pr', 'view', '7'], run).number, 7);
   assert.equal(execute(['pr', 'ready', '7'], run).number, 7);
   assert.equal(execute(['pr', 'draft', '7'], run).number, 7);
-  assert.equal(execute(['branch', 'rename', '7', '--to', 'feature/slot-a-x'], fake({ 'pr view 7': JSON.stringify(RAW) }).run).number, 7);
   assert.equal(execute(['pr', 'edit', '7', '--milestone', 'Verification'], run).number, 7);
   assert.equal(typeof execute(['pr', 'body', '7'], run).text, 'string');
   assert.deepEqual(execute(['pr', 'files', '7'], run).files, ['a.ts']);
@@ -386,24 +385,10 @@ test('a pull request goes back to draft in one call and answers in the contract 
   assert.deepEqual(calls[0], ['pr', 'ready', '7', '--undo']);
 });
 
-test('a branch rename moves the head into the named branch, once, and refuses a fork head', () => {
-  const head = (fields) => JSON.stringify({ ...RAW, headRefName: 'fix/login-form', isCrossRepository: false, ...fields });
-  const renamed = fake({ 'pr view 7 --json headRefName,isCrossRepository,state': head(), 'pr view 7': JSON.stringify({ ...RAW, headRefName: 'feature/slot-a-login-form' }) });
-  const pr = renameBranch(7, 'feature/slot-a-login-form', renamed.run);
-  assertShape('pr', pr);
-  assert.equal(pr.head.ref, 'feature/slot-a-login-form');
-  // The branch path keeps its slashes; the new name goes as a field.
-  assert.deepEqual(renamed.calls[1], ['api', '-X', 'POST', 'repos/{owner}/{repo}/branches/fix/login-form/rename', '-f', 'new_name=feature/slot-a-login-form']);
-  // A retry finds the branch already renamed and calls no rename.
-  const again = fake({ 'pr view 7': head({ headRefName: 'feature/slot-a-login-form' }) });
-  renameBranch(7, 'feature/slot-a-login-form', again.run);
-  assert.equal(again.calls.some((args) => args[0] === 'api'), false);
-  const fork = fake({ 'pr view 7': head({ isCrossRepository: true }) });
-  assert.throws(() => renameBranch(7, 'feature/slot-a-x', fork.run), /on a fork/);
-  assert.equal(fork.calls.some((args) => args[0] === 'api'), false);
-  assert.throws(() => renameBranch(7, 'x', fake({ 'pr view 7': head({ state: 'CLOSED' }) }).run), /not open/);
-  assert.throws(() => execute(['branch', 'rename', '7', '--to'], renamed.run), /--to needs a value/);
-  assert.throws(() => execute(['branch', 'rename', '7'], renamed.run), /needs --to/);
+test('renaming a head branch is not offered: the platform closes a pull request whose head branch is renamed', () => {
+  const renamed = fake({ 'pr view 7': JSON.stringify(RAW) });
+  assert.throws(() => execute(['branch', 'rename', '7', '--to', 'feature/slot-a-x'], renamed.run), UsageError);
+  assert.deepEqual(renamed.calls, []);
 });
 
 test('the discovery reader lists whether each head lives on a fork', () => {

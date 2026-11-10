@@ -48,7 +48,7 @@ The prompt names the input file and the result path; the same paths are in `$OPE
 `$OPERATOR_RESULT`. The input holds:
 
 - `run` — `id`, `jobId`, `workflow`, `operation`, `attempt`;
-- `member` — the slot the run works in: the one the pull request's branch names, or a free one
+- `member` — the slot the run works in: the pull request's slot (*The slot stays with its pull request*), or a free one
   for intake and clarification (absent when run by hand: the checkout's own name gives it);
 - `subject` — `pr-<n>`, `queue` for intake, or `clarify-queue` for selecting an item to clarify;
 - `input` — pointers only: `pr`, `head`, `ci`, `milestone`; a review gets `checkout` (the slot it
@@ -153,8 +153,13 @@ sends it to the operation named there, which returns it to `development`.
   `owner:onhold`, `owner:rejected` or `owner:cancelled` appearing stops the run where it stands:
   commit and push nothing more, drop `ai:processing`, result `noop` - a closed attempt belongs to
   intake, which keeps what the run pushed. Skills read `owner:*` and never write it, the `question` label (*Asking the owner*) excepted.
-- **The slot stays with its pull request.** A pull request lives in the slot its branch names
-  (`<prefix><slot>-<slug>`) from intake until it merges or closes: every run of it works there,
+- **The slot stays with its pull request.** A pull request lives in the slot its latest
+  `<!-- operator:slot <slot> -->` comment names, else the one its branch names
+  (`<prefix><slot>-<slug>`), from intake until it merges or closes; it holds that slot meanwhile. A
+  slot comment counts only when it also carries the note marker and names one of `operator_config`
+  `slots`. Only an adoption writes that
+  comment (`operator-intake`): the platform closes a pull request whose head branch is renamed, so
+  an adopted branch keeps its name. Every run of it works there,
   the review included, and leaves the slot on the PR branch. Work a run could not verify and push
   stays there, committed and not pushed; a `failed` run says the work is kept in the slot. Every run
   starts by reconciling the slot with the PR's live head, whatever ended the run before it (`failed`,
@@ -226,7 +231,8 @@ input starts the phase operation again.
 - Every other comment a skill posts ends with `<!-- operator:note -->`, a reply in a review thread
   included: its review has no body of its own, so discovery reads the thread comment. A passing
   verification's note also carries `<!-- operator:verified <digest> -->` (`operator-verify`), and a
-  passing review's `<!-- operator:reviewed <digest> -->` (`operator-review`).
+  passing review's `<!-- operator:reviewed <digest> -->` (`operator-review`). An adoption's note carries
+  `<!-- operator:slot <slot> -->` (*The slot stays with its pull request*).
 
 ## Judging stages
 

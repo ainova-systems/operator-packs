@@ -18,7 +18,6 @@ platform cannot serve fails with a named capability gap, never an emulation.
 | `pr edit <n> [--claim [--takeover]] [--milestone <m>] [--title <t>] [--body-file <f>] [--add-label <l>]... [--remove-label <l>]...` | `pr`; a phase hand-off, or a claim with a milestone move, is one edit, a new title or body included; with `--claim` the held check comes first and a held pull request is not edited at all |
 | `pr body <n>` | the body as plain text |
 | `pr files <n>` | `{ pr, files: [path] }` |
-| `branch rename <n> --to <name>` | `pr`; renames the head branch and the open pull request follows it; unchanged when it already has that name; a head on a fork is a usage error (exit 2) |
 | `checks <sha>` | `{ sha, state: none\|pending\|success\|failure, runs: [{ name, state, url }] }`, judged on the deciding workflows only |
 | `threads <n> [--unresolved]` | `[{ id, resolved, path, line, comments: [{ author, body, createdAt }] }]` |
 | `threads --resolve <id> --body <text>` | `{ id, resolved: true, changed }`; replies once, then resolves |

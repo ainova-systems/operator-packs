@@ -63,12 +63,12 @@ review job's result (the manifest chains it); an owner answer resumes the asking
 
 | Subject | When | Request |
 |---|---|---|
-| `queue` | a free delivery slot and an open pull request carrying `labels.handoff`, in any milestone, without `processing`, `onhold`, `cancelled` or `rejected`, whose head is not on a fork and which no job or wait covers | `intake`, `input: { handoff: <n>, head }` for the oldest such pull request by creation, `member` the slot its branch names when no other pull request holds it, else the first free slot; key `handoff:<n>:<head>:<member>:e-<id of the label's latest labeled event>`, so a label the owner applies again asks again. Ahead of every queue item; `quotas` do not count it |
-| `queue` | a free delivery slot (`slots` none of whose open PRs' branches names it) and at least one queue item eligible under profile `flow_queue` | `intake`, `member` the first free slot, key `intake:<fingerprint of the candidates, open PRs and quotas>` |
+| `queue` | a free delivery slot and an open pull request carrying `labels.handoff`, in any milestone, without `processing`, `onhold`, `cancelled` or `rejected`, whose head is not on a fork and which no job or wait covers | `intake`, `input: { handoff: <n>, head }` for the oldest such pull request by creation, `member` its slot (`operator-contract` > The slot stays with its pull request) when it has one no other pull request holds, else the first free slot; key `handoff:<n>:<head>:<member>:e-<id of the label's latest labeled event>`, so a label the owner applies again asks again. Ahead of every queue item; `quotas` do not count it |
+| `queue` | a free delivery slot (`slots` that no open pipeline PR has as its slot, `operator-contract` > The slot stays with its pull request) and at least one queue item eligible under profile `flow_queue` | `intake`, `member` the first free slot, key `intake:<fingerprint of the candidates, open PRs and quotas>` |
 | `clarify-queue` | a free clarification slot (`clarifySlots`) and at least one item waiting on an owner decision | `clarify`, step `select`, `candidates`: the top `clarifyCandidates` ranked items, key `clarify-queue:<fingerprint>` |
 
-The label means the hand-over is done: nobody pushes to the old branch name after it, because the
-adoption may rename the branch and the pull request follows the rename. A pull request already in a
+The label means the hand-over is done: the adoption keeps the branch name and binds the
+pull request to its slot with a comment (`operator-contract` > The slot stays with its pull request). A pull request already in a
 pipeline milestone, Merge Queue included, is adopted on purpose and returns to `queue`; its factors
 are left to the freshness rules (`pr-state.md`). The adopting run removes `labels.handoff` in the edit
 that claims it and moves it to `queue`, so from then on it is an ordinary queue pull request, stale

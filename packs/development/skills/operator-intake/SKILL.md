@@ -81,12 +81,11 @@ the `operator-contract` skill first: input, result, claim and markers follow it.
      purpose, and it returns to the queue milestone; its factors are left to the freshness rules.
      Quotas and the conflict gate do not apply, because the owner chose it. Check the slot is still
      free of other pull requests.
-   - Rename first, while nothing else has changed: when its branch does not name `<slot>`,
-     `forge_cli branch rename <n> --to <prefix><slot>-<slug>` (the branch's own prefix when it is one
-     of profile `branch_prefixes`, else the feature prefix; the slug is its old last segment without a
-     slot segment). The rename is idempotent; a failure (a fork head, missing rights) ends the run
-     `failed` with nothing else changed, and the owner hands it over again. Re-read the pull request
-     and require the head unchanged.
+   - Bind it to the slot first, while nothing else has changed: unless its slot is already `<slot>`
+     (`operator-contract` > The slot stays with its pull request), post one comment
+     (`forge_cli comment`) saying the pipeline adopted it into `<slot>`, whose last lines are
+     `<!-- operator:slot <slot> -->` and the note marker. Its branch keeps its name: the platform
+     closes a pull request whose head branch is renamed. A retry finds the comment and posts none.
    - Then one claim edit makes it an ordinary queue pull request: `forge_cli pr edit <n> --claim
      --milestone "<queue title>" --remove-label <hand-off label>`, also removing any terminal state
      label an earlier run left and `labels.accepted` (the owner handed it back, so no acceptance
@@ -111,7 +110,7 @@ hand-off label, or closes a rejected or cancelled attempt. To deliver the next i
 - Queue maintenance left the outcome comment on the closed pull request and the queue item's commit
   on the integration branch.
 - An adoption left the pull request in the queue milestone, without the hand-off label or a claim,
-  its branch naming the slot, and draft whenever `readyLimit` is set.
+  its slot `<slot>`, its branch unrenamed, and draft whenever `readyLimit` is set.
 
 ## Scope / hand-off
 
@@ -122,4 +121,5 @@ hand-off label, or closes a rejected or cancelled attempt. To deliver the next i
 
 - One item and one PR per queue run. No implementation, merge or release here.
 - Never write `owner:*` or delete a remote branch; removing the hand-off label of the pull request
-  being adopted is this skill's, and a rename is not a deletion.
+  being adopted is this skill's. Never rename a pull request's head branch: the platform closes the
+  pull request.

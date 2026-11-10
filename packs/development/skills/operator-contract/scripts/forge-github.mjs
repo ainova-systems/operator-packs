@@ -9,8 +9,6 @@
 //   pr create --base <b> --head <h> --title <t> --body-file <f> [--draft]   pr
 //   pr ready <n>                  pr
 //   pr draft <n>                  pr         back to draft: QA capacity goes only to the drafts admission promotes
-//   branch rename <n> --to <name> pr         renames the head branch; the open pull request follows it.
-//                                 A head on a fork is refused (exit 2): the pipeline cannot push to it
 //   checks <sha>                  { sha, state: none|pending|success|failure, runs: [{ name, state, url }] }
 //                                 the deciding workflows only (operator_config ciWorkflows), as discovery judges them
 //   threads <n> [--unresolved] [--resolve <id> --body <text>]
@@ -165,23 +163,6 @@ export function readyPr(number, run = gh) {
 
 export function draftPr(number, run = gh) {
   run(['pr', 'ready', String(number), '--undo']);
-  return viewPr(number, run);
-}
-
-/**
- * Renames a pull request's head branch on the platform, so an adopted pull request's branch names the
- * slot it lives in; the open pull request follows the rename. A retry finds the branch renamed and
- * changes nothing. A head on a fork is refused: the pipeline cannot push to it.
- */
-export function renameBranch(number, to, run = gh) {
-  if (!to) throw new UsageError('branch rename needs --to');
-  const head = JSON.parse(run(['pr', 'view', String(number), '--json', 'headRefName,isCrossRepository,state']));
-  if (head.isCrossRepository) throw new UsageError(`pull request ${number} has its head on a fork: its branch cannot be renamed or pushed to`);
-  if (String(head.state ?? '').toUpperCase() !== 'OPEN') throw new UsageError(`pull request ${number} is not open`);
-  if (head.headRefName !== to) {
-    const branch = head.headRefName.split('/').map(encodeURIComponent).join('/');
-    run(['api', '-X', 'POST', `repos/{owner}/{repo}/branches/${branch}/rename`, '-f', `new_name=${to}`]);
-  }
   return viewPr(number, run);
 }
 
@@ -440,7 +421,6 @@ const VALUE_FLAGS = new Set(['--milestone', '--add-label', '--remove-label', '--
 export const SUBCOMMAND_FLAGS = {
   'pr create': ['--base', '--head', '--title', '--body-file', '--draft'],
   'pr edit': ['--claim', '--takeover', '--milestone', '--title', '--body-file', '--add-label', '--remove-label'],
-  'branch rename': ['--to'],
   threads: ['--unresolved', '--resolve', '--body'],
   claim: ['--takeover'],
   factor: ['--name'],
@@ -485,14 +465,14 @@ function number(value) {
   return parsed;
 }
 
-const SUBCOMMANDS = new Set(['pr list', 'pr view', 'pr create', 'pr ready', 'pr draft', 'pr edit', 'pr body', 'pr files', 'branch rename', 'checks', 'threads', 'claim', 'factor', 'comment', 'notes', 'merge', 'events']);
+const SUBCOMMANDS = new Set(['pr list', 'pr view', 'pr create', 'pr ready', 'pr draft', 'pr edit', 'pr body', 'pr files', 'checks', 'threads', 'claim', 'factor', 'comment', 'notes', 'merge', 'events']);
 
-const USAGE = 'usage: forge-github.mjs pr list|view <n>|create ...|ready <n>|draft <n>|edit <n> [--claim] [--milestone <m>] [--title <t>] [--body-file <f>] ...|body <n>|files <n> | branch rename <n> --to <name> | checks <sha> | threads <n> [--unresolved] [--resolve <id> --body <text>] | claim take|release <n> | factor set|clear <n> --name <f> | comment <n> --body-file <f> | notes <n> | merge <n> --method <m> | events <n>';
+const USAGE = 'usage: forge-github.mjs pr list|view <n>|create ...|ready <n>|draft <n>|edit <n> [--claim] [--milestone <m>] [--title <t>] [--body-file <f>] ...|body <n>|files <n> | checks <sha> | threads <n> [--unresolved] [--resolve <id> --body <text>] | claim take|release <n> | factor set|clear <n> --name <f> | comment <n> --body-file <f> | notes <n> | merge <n> --method <m> | events <n>';
 
 /** Runs one subcommand and returns what it prints: JSON, or plain text for `pr body`. */
 export function execute(args, run = gh) {
   const [command, action, target] = args;
-  const subcommand = command === 'pr' || command === 'branch' ? `${command} ${action}` : command;
+  const subcommand = command === 'pr' ? `${command} ${action}` : command;
   if (SUBCOMMANDS.has(subcommand)) onlyFlags(args, subcommand);
   if (command === 'pr') {
     if (action === 'list') return listPrs(run);
@@ -504,7 +484,6 @@ export function execute(args, run = gh) {
     if (action === 'body') return { text: prBody(number(target), run) };
     if (action === 'files') return prFiles(number(target), run);
   }
-  if (command === 'branch' && action === 'rename') return renameBranch(number(target), option(args, '--to'), run);
   if (command === 'checks') return checks(action, run);
   if (command === 'threads') {
     if (args.includes('--resolve')) return resolveThread(option(args, '--resolve'), option(args, '--body'), run);

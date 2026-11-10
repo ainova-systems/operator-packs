@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-11-10
+
+### Fixed
+
+- Adopting a handed-off pull request no longer closes it. The platform closes a pull request whose head branch is renamed, so `operator-intake` keeps the branch name and binds the pull request to its slot with an `<!-- operator:slot <slot> -->` comment; a pull request's slot is the one that comment names, else the one its branch names. The forge script's `branch rename` is removed.
+
 ## [0.17.0] - 2026-11-10
 
 Implementation rounds have a budget, the digests match core's, and a reference manifest says what each operation runs on.

@@ -9,7 +9,7 @@ state:
   namespace: op-example
 pools:
   # The delivery slots, one checkout each: d1, d2 and d3, the names operator_config `slots` lists.
-  # A pull request lives in the slot its branch names, from intake until it merges or closes.
+  # A pull request lives in its slot (its slot comment, else its branch) from intake until it merges or closes.
   development-slot:
     workspaces:
       d: { count: 3, cwd: '../<repository>-{name}', herdr: '<repository>-{name}' }

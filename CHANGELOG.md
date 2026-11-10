@@ -35,6 +35,7 @@ Implementation rounds have a budget, the digests match core's, and a reference m
 **Updating:**
 
 - Set profile `digest_exclude` to the blocks `digestExclude` lists, in the same order, in core's format (`` `<start>` .. `<end>` ``, blocks separated by `;`); keep `digestExclude` until the project's discovery reads the profile, then remove it.
+- Where profile `qa_checks` matches a pull request's files, its steps digest now includes those checks, so a verification report recorded before the update reads as stale and that pull request is verified again.
 - Have the discovery's tests run `assertStaleClaims` and `digestExclusions` from `scripts/discovery-contract.mjs`.
 - To keep rounds unbounded, set `max_pr_rounds: unlimited`; a pull request already past three reviewed rounds otherwise ends `ai:manual` on its next round.
 - A project whose `operator_config` sets `readyLimit` sets profile `draft_ready: owner`, so no core skill run on its pull requests marks a draft ready ahead of QA admission.

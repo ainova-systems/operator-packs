@@ -1,0 +1,56 @@
+# A reference manifest for the development pack: the operations the Operator runtime
+# (@ainova-systems/operator) runs for pull-request delivery, one phase skill each. Copy it to the
+# repository root as operator.yaml, replace every <...> value, then run `operator validate --describe`.
+# Why each value is what it is: runtime-manifest.md beside this file.
+contract: 1
+project: example            # the project's name: lower-case letters, digits and dashes
+state:
+  provider: ainoflow
+  namespace: op-example
+pools:
+  # The delivery slots, one checkout each: d1, d2 and d3, the names operator_config `slots` lists.
+  # A pull request lives in the slot its branch names, from intake until it merges or closes.
+  development-slot:
+    workspaces:
+      d: { count: 3, cwd: '../<repository>-{name}', herdr: '<repository>-{name}' }
+  # With the clarification pack, its own slots (operator_config `clarifySlots`):
+  # clarify-slot:
+  #   workspaces:
+  #     c: { count: 1, cwd: '../<repository>-{name}', herdr: '<repository>-{name}' }
+workflows:
+  development:
+    timezone: UTC
+    triggers:
+      - { every: 5m, run: discover }
+      - { on: poke, run: discover }
+    operations:
+      # Discovery: the command profile operator_discover names, one pass at a time.
+      discover: { kind: script, command: '<the discovery command>', timeout: 3m, exclusive: true }
+      # Each phase names one skill; the runtime's default prompt passes it the input and result paths.
+      # A phase with `fallback: codex` cannot pass --effort (runtime-manifest.md > Model and effort).
+      intake:         { kind: agent, engine: claude, skill: operator-intake,    model: sonnet, pool: development-slot, timeout: 1h,  retries: 2, retryDelay: 30m, args: ['--permission-mode', auto, '--effort', medium] }
+      plan:           { kind: agent, engine: claude, skill: operator-plan,      model: opus,   pool: development-slot, timeout: 2h,  retries: 2, retryDelay: 30m, args: ['--permission-mode', auto, '--effort', high] }
+      implement:      { kind: agent, engine: claude, skill: operator-implement, model: opus,   pool: development-slot, timeout: 4h,  retries: 2, retryDelay: 30m, args: ['--permission-mode', auto, '--effort', high] }
+      # The review: another engine than the one that implemented, read-only, in the pull request's own
+      # slot. Its model and effort are the reviewer agent's, rendered into .codex/agents/<agent>.toml.
+      review:
+        kind: agent
+        engine: codex
+        agent: dev-code-reviewer
+        schema: '<the JSON Schema of the findings file operator-contract > Judging stages defines>'
+        thread: per-subject
+        pool: development-slot
+        access: read
+        timeout: 45m
+        retries: 4
+        retryDelay: 30m
+        prompt: >-
+          Run the git-review-pr skill (the skill profile review_skill names) for pull request {subject},
+          read-only, with the input file {input}: its checkout is the location under judgement and its
+          body the pull request body. Post nothing; the complete report comment goes in "report".
+          Answer only with the JSON your output schema requires.
+        then: review-verdict
+      review-verdict: { kind: agent, engine: claude, skill: operator-review,    model: sonnet, pool: development-slot, timeout: 30m, retries: 2, retryDelay: 30m, args: ['--permission-mode', auto, '--effort', low] }
+      verify:         { kind: agent, engine: claude, skill: operator-verify,    model: sonnet, pool: development-slot, timeout: 2h,  retries: 2, retryDelay: 30m, notify: [done, needs-input, failed], args: ['--permission-mode', auto, '--effort', high] }
+      merge:          { kind: agent, engine: claude, skill: operator-merge,     model: sonnet, pool: development-slot, timeout: 30m, retries: 2, retryDelay: 30m, args: ['--permission-mode', auto, '--effort', high] }
+      # clarify:      { kind: agent, engine: claude, skill: operator-clarify,   model: opus,   pool: clarify-slot,     timeout: 3h,  retries: 2, retryDelay: 30m, notify: [needs-input, failed], args: ['--permission-mode', auto, '--effort', high] }

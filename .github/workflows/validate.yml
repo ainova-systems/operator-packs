@@ -17,3 +17,15 @@ jobs:
           node-version: 24
       - name: Test pack scripts
         run: node --test packs/*/skills/*/scripts/*.test.mjs
+
+  # Adopters run the pack scripts on Windows too: the same tests there.
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Test pack scripts
+        shell: bash
+        run: node --test packs/*/skills/*/scripts/*.test.mjs

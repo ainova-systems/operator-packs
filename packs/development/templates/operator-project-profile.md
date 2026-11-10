@@ -50,8 +50,12 @@ description: Project profile keys the operator packs' skills read, with their de
 - update_strategy: merge             <!-- how the integration branch comes into a pull request's branch: merge | rebase -->
 - conflict_skill: git-resolve-conflicts   <!-- the skill a conflict with the integration branch goes to -->
 - verify_section: Manual Verification     <!-- the verification heading, and the section the steps digest covers -->
+- qa_checks: auto                    <!-- the standing checks the steps digest takes after the verification section (core's git-verify-pr > Digests): auto = docs/qa-checks.md when it exists | <repo-relative file> | none -->
+- digest_exclude: none               <!-- blocks removed from a pull request body before a digest is computed, in core's format (git-verify-pr > Digests): each block a backticked start marker, `..`, a backticked end marker, blocks separated by `;`; none = nothing removed -->
 - pr_risk_size: off                  <!-- whether the body carries a Risk/Size line to recompute: off | on -->
 - pr_success_factors: ai:verified, ai:reviewed   <!-- the factors accept-ready requires fresh at head -->
+- max_pr_rounds: 3                   <!-- the rounds operator-implement runs before it ends through outcome_skill on that stop rule, counted from the pull request's review reports (operator-implement step 4); unlimited = no round budget -->
+- draft_ready: finalize              <!-- who marks a draft pull request ready for review, as core defines it: finalize = git-finalize-pr, before its first round | owner = not this run - the owner, or a runtime that owns readiness, marks it; the run then ends ai:manual saying so. In the operator flow operator-verify's QA admission marks drafts ready (references/pr-state.md), so a project whose operator_config sets readyLimit sets owner -->
 - merge_method: squash               <!-- how merge_skill merges: squash | merge | rebase -->
 - flow_intake: auto                  <!-- the capture step operator-plan runs: auto = the project's intake skill, else the core pack's dev-deliver Phase A interview | <skill name> -->
 - flow_implement: auto               <!-- the implementation: auto = the project's own execution skill when one is installed, else one subagent working to the plan's slices | <skill name> -->

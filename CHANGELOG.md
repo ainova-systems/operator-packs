@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Implementation rounds have a budget, the digests match core's, and a reference manifest says what each operation runs on.
+
+### Added
+
+- `operator-implement` runs at most profile `max_pr_rounds` rounds (default 3, `unlimited` for none), counted from the pull request's review reports since its last passing verification, outcome or hand-off; a spent budget ends through profile `outcome_skill` with an `## Outcome` report, and a comment from the owner after it starts a new budget. Discovery skips such a pull request until then.
+- A reference manifest (`operator-contract/references/operator.example.yaml`) and `references/runtime-manifest.md`: model, effort and retries per operation, with why; the values are judgment, not yet measured.
+- `operator-contract` > The manifest: an operation names one skill and passes its input, never a procedure, and a pipeline branch runs the skills and rules it was created with.
+- `scripts/discovery-contract.mjs`: contract cases a discovery's tests run - a claim whose job is queued or running is never stale, whatever subject the job runs under - and `digestExclusions`, which refuses an `operator_config` `digestExclude` that differs from profile `digest_exclude`.
+- `ROADMAP.md`: work recorded and not built, and known defects.
+
+### Changed
+
+- The steps and body digests, still stated here in full so the pack runs without core, match core's `git-verify-pr` > Digests again: the steps digest includes the standing checks profile `qa_checks` matches, and the blocks removed are profile `digest_exclude`'s (both keys restated with core's defaults).
+- A verification step sent back as defective may also be corrected where it asks for what verification cannot do, as core's `git-finalize-pr` > The round, step 5 allows; a step that ran and failed is a code defect, and changing its conditions or expected result stays the owner's decision.
+- `references/pr-state.md` is the state page core's `git-workflow` lets a scenario pack keep for its own runs, and its `claims` record is the runtime claims record core recognises; it no longer calls the takeover an operator extension.
+- Profile `draft_ready` is restated with core's default and meaning: in the operator flow a draft is marked ready only by `operator-verify`'s QA admission, so a project that sets `readyLimit` sets `draft_ready: owner`.
+
+### Deprecated
+
+- `operator_config` `digestExclude`: while set it must name the same blocks as profile `digest_exclude`, in the same order.
+
+### Fixed
+
+- The forge script's command-line tests run against a stand-in for `gh` on every platform and can no longer reach the installed `gh`; on Windows one of them ran it against the checkout's repository. CI runs the pack scripts' tests on Windows too.
+
+**Updating:**
+
+- Set profile `digest_exclude` to the blocks `digestExclude` lists, in the same order, in core's format (`` `<start>` .. `<end>` ``, blocks separated by `;`); keep `digestExclude` until the project's discovery reads the profile, then remove it.
+- Where profile `qa_checks` matches a pull request's files, its steps digest now includes those checks, so a verification report recorded before the update reads as stale and that pull request is verified again.
+- Have the discovery's tests run `assertStaleClaims` and `digestExclusions` from `scripts/discovery-contract.mjs`.
+- To keep rounds unbounded, set `max_pr_rounds: unlimited`; a pull request already past three reviewed rounds otherwise ends `ai:manual` on its next round.
+- A project whose `operator_config` sets `readyLimit` sets profile `draft_ready: owner`, so no core skill run on its pull requests marks a draft ready ahead of QA admission.
+
 ## [0.16.1] - 2026-11-10
 
 ### Fixed

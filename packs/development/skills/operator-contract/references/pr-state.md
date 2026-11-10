@@ -3,9 +3,10 @@
 The state, factor and report conventions every operator run reads and writes.
 
 **Authority.** For operator runs, and for every skill a profile key delegates a step to
-(`operator-contract` > Delegated steps), this page wins. The core pack's `git-workflow` rule states
-the same vocabulary for core's own skills; where the two ever differ, an operator run follows this
-page. A project without core needs only this page.
+(`operator-contract` > Delegated steps), this page wins: it is the state page core's `git-workflow`
+makes authoritative for a scenario pack's own runs (> Autonomous PR labels, where every run ends).
+The core pack's `git-workflow` rule states the same vocabulary for core's own skills; where the two
+ever differ, an operator run follows this page. A project without core needs only this page.
 
 The claim is a role: `operator_config` `labels.processing` sets its name (`operator-config.md`).
 The terminal labels `ai:completed`, `ai:manual` and `ai:failed` are fixed names on purpose, so every
@@ -27,15 +28,20 @@ Exactly one at a time, written by the actor doing the work:
 - A run that pushes holds the claim while it pushes: `ai:processing` stands before the push.
 - A run ends in one of two ways, never with its claim left behind: a **terminal label** (the
   outcome step), or a **handoff** - one edit that moves the pull request to the next milestone and
-  removes `ai:processing`; no state label plus milestone X means waiting for phase X.
+  removes `ai:processing`, the hand-off core's `git-workflow` lets a scenario pack declare; no state
+  label plus milestone X means waiting for phase X.
 - A pull request carrying no `ai:*` label is human-driven, and every gate skips label checks for it.
+- A draft is marked ready only by `operator-verify`'s QA admission (`operator_config` `readyLimit`;
+  without it intake opens pull requests ready). The runtime owns readiness, which is profile
+  `draft_ready: owner` in core's terms, so no core skill run on these pull requests marks one ready.
 
 **Claims.** A claim is not a lock: a run takes a pull request only while no `ai:processing` stands
 on it, or when the claim is its own - for an operator run, only through its `claims` record or
 `input.staleClaim` (`operator-contract` > Holding a pull request); a handoff note is not recognised.
 A run that finds another run's claim takes nothing and posts one refusal report: `## <Stage> - HELD`, `head: <sha>`, what it was asked to do and that it took
-nothing. **Operator extension:** a claim whose runtime job has stopped may be taken over as
-`operator-contract` > Holding a pull request describes; core has no takeover.
+nothing. The `claims` record is the runtime's claims record core's `git-workflow` recognises as a
+run's own claim (> Autonomous PR labels, *It is a claim, not a lock*); when an operator run takes
+one over, and how it records the previous holder, is `operator-contract` > Holding a pull request.
 
 ## Success factors
 

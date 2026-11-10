@@ -101,6 +101,9 @@ Queue items waiting on an owner decision are settled by the separate clarificati
   next free slot adopts it ahead of every queue item, plan revises its scope from what it already
   carries, and it follows the regular flow from there.
 - **Answers questions** in the PR conversation; discovery resumes the asking skill.
+- **Answers a spent round budget**: a pull request whose rounds ran out carries `ai:manual` and an
+  `## Outcome - MANUAL` report; a comment after it sends it back to implementation with a new budget
+  (profile `max_pr_rounds`).
 - **Tests on QA** in Human Review; a comment or a QA ticket sends the PR back.
 - **Steers with labels**: `owner:accepted`, `owner:onhold`, `owner:revalidate`, `owner:rejected`,
   `owner:cancelled` (`operator-contract` > Owner labels); `owner:question` marks a pull request

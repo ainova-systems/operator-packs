@@ -89,9 +89,35 @@ export function checkOperatorConfig(config, source = 'operator configuration') {
   return config;
 }
 
-/** The one place this layer starts `gh`; every reader and command takes a runner so tests inject one. */
-export function gh(args) {
-  return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+// A network fault between this host and the forge, or a gateway error in front of it.
+const TRANSIENT = /connection reset by peer|TLS handshake timeout|i\/o timeout|unexpected EOF|connection refused|no such host|HTTP 50[234]/i;
+const READS = new Set(['list', 'view', 'checks', 'diff', 'status']);
+const FIELDS = new Set(['-f', '-F', '--field', '--raw-field', '--input']);
+
+/** A call that changes nothing on the forge, so asking it again cannot write twice. */
+export function isRead(args) {
+  if (args[0] !== 'api') return READS.has(args[1]);
+  if (args.some((arg) => /^(-X|--method)/.test(arg))) return false;
+  if (args[1] === 'graphql') return !args.some((arg) => arg.startsWith('query=') && /\bmutation\b/.test(arg.replace(/#[^\n]*/g, '')));
+  return !args.some((arg) => FIELDS.has(arg));
+}
+
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * The one place this layer starts `gh`; every reader and command takes a runner so tests inject one.
+ * A read that meets a network fault is asked again, up to three times; a write never is. The pause
+ * blocks the process, which suits these short CLI calls and not a long-lived importer.
+ */
+export function gh(args, { exec = execFileSync, wait = pause, attempts = 3 } = {}) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return exec('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    } catch (error) {
+      if (attempt >= attempts || !isRead(args) || !TRANSIENT.test(String(error.stderr ?? ''))) throw error;
+      wait(2000 * attempt);
+    }
+  }
 }
 
 const PR_FIELDS = 'number,url,title,body,isDraft,state,headRefName,headRefOid,baseRefName,mergeable,labels,milestone,createdAt,author';

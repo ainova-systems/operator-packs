@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-10
+
+### Fixed
+
+- The forge script asks a read again, up to three times, when the call meets a network fault between the host and the forge (connection reset, TLS handshake timeout, a 502/503/504 gateway error); a write is never repeated, so a dropped connection no longer fails a whole discovery run.
+
 ## [0.16.0] - 2026-11-10
 
 A judging stage can go on while its engine is unavailable.

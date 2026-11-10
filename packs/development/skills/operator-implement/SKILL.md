@@ -24,10 +24,12 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
    the live PR still conflicting with the integration branch (profile `forge_cli pr view <n>`: `mergeable` reads `conflicting`), in
    any later milestone. A moved `input.head`, `owner:onhold`, or another run's `ai:processing` (a HELD report, `operator-contract`) ends
    `noop` (a stopped run's claim is taken over, `operator-contract`); rejected and cancelled attempts
-   belong to intake.
+   belong to intake. So does an `ai:manual` or `ai:failed` no owner input follows (profile
+   `operator_discover --owner-input <n>` lists none after its `## Outcome` report): it waits for the owner.
 2. **Claim the PR in its slot.** A conflicting PR from a later milestone moves back to the
    development milestone in the claim edit, removing an obsolete `ai:completed`: the merged head is
-   reviewed and verified again on its way back. Reconcile the slot with the live head
+   reviewed and verified again on its way back. The claim edit also removes an `ai:manual` or
+   `ai:failed` the owner has answered. Reconcile the slot with the live head
    (`operator-contract` > The slot stays with its pull request): local commits ahead of it are this
    round's work to bring up to date, gate and push. Read CI from the head's checks
    (profile `forge_cli checks <head>`, the latest attempt of each workflow), the latest `## Code review` and
@@ -42,12 +44,18 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
    The plan is on the queue item (or profile `flow_plan`'s file); a pull request without a queue item
    keeps it in its body's `## Plan` section, and a handed-off one plans only the remaining work from
    its current head, whose existing commits count as implementation.
-   A verification step sent back as defective is corrected only where it names or describes
-   something that does not exist. A step whose declared conditions - viewport, role, data, default
-   state - show the promised behaviour missing reports a code defect: fix the code. Moving the step to
-   conditions where it passes rewrites the expectation to fit the failure, which only the owner may
-   decide, as a question with `resume: implement`.
-4. **Run one round.** Run `flow_implement` on this PR, naming the pending work; the round ends at one
+   A verification step sent back as defective is corrected only where core's `git-finalize-pr` >
+   The round, step 5 allows: it names something that does not exist, or asks for what verification
+   cannot do. A step that ran and failed is a code defect: fix the code. Changing a step's
+   conditions - role, viewport, data, default state - or its expected result rewrites the
+   expectation to fit the failure, and is the owner's decision, a question with `resume: implement`.
+4. **Run one round, within the budget.** Count the heads `## Code review` reports judged since the
+   newest of the last `## Verification - PASS` report, the last `## Outcome` report and the last
+   hand-off label event (profile `forge_cli events <n>`): the first is the implementation, each later
+   one a round. With rounds at profile `max_pr_rounds` (`unlimited`: no budget) and work pending, run
+   none: profile `outcome_skill` ends the run on that stop rule, naming the rounds spent and the work
+   left; result `done`, no next.
+   Otherwise run `flow_implement` on this PR, naming the pending work; the round ends at one
    profile `commit_skill`, with no pre-commit review pass and no CI wait, which belong to this phase.
    Reply to and resolve review threads through profile `threads_skill`. An owner
    decision is a question with `resume: implement`.
@@ -99,6 +107,7 @@ instead of handing the head to the runtime, and posts its report, label and body
 - After a round the pushed head is the pull request's head and the result asks for `review` at it.
 - A move to verification happens only with a review report at the head with no Critical finding,
   every declared factor fresh and CI green on that head.
+- No round ran past the budget; a spent one left an `## Outcome` report naming it.
 
 ## Scope / hand-off
 

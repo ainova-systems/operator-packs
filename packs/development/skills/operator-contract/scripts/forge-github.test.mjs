@@ -34,6 +34,28 @@ function fake(answers = {}) {
   return { run, calls };
 }
 
+// No test can reach the real gh, or the repository it would act on, on any platform. Every command line below
+// runs with a stand-in preloaded into the script's process, which answers every gh call with FORGE_GH_ANSWER; this
+// process and those command lines see a PATH that holds only the stand-in's folder, so a gh call nothing caught
+// finds no gh at all and fails.
+const STAND_IN = mkdtempSync(join(tmpdir(), 'forge-gh-'));
+process.env.PATH = STAND_IN;
+const STAND_IN_MODULE = join(STAND_IN, 'gh-stand-in.cjs');
+writeFileSync(STAND_IN_MODULE, [
+  "const childProcess = require('node:child_process');",
+  "childProcess.execFileSync = (file) => { if (file !== 'gh') throw new Error(`stand-in: unexpected ${file}`); return process.env.FORGE_GH_ANSWER ?? ''; };",
+  "require('node:module').syncBuiltinESMExports();",
+].join('\n'));
+process.on('exit', () => rmSync(STAND_IN, { recursive: true, force: true }));
+
+/** The script's command line, run against the gh stand-in: `answer` is what every gh call prints. */
+function cli(args, { env = process.env, answer = '' } = {}) {
+  const isolated = Object.fromEntries(Object.entries(env).filter(([key]) => key.toUpperCase() !== 'PATH'));
+  return spawnSync(process.execPath, ['--require', STAND_IN_MODULE, SCRIPT, ...args], {
+    encoding: 'utf8', cwd: STAND_IN, env: { ...isolated, PATH: STAND_IN, FORGE_GH_ANSWER: answer },
+  });
+}
+
 test('a pull request is normalized to the contract shape', () => {
   assert.deepEqual(normalizePr(RAW), {
     number: 7, url: RAW.url, title: 'T', body: 'B', draft: true, state: 'open', head: { ref: 'feature/slot-a-x', sha: 'abc1234def' }, base: { ref: 'develop' },
@@ -135,10 +157,10 @@ test('the body and the label events read the same fields discovery does', () => 
 test('the command line refuses an unknown subcommand and a missing number', () => {
   assert.throws(() => execute(['nope']), /usage: forge-github/);
   assert.throws(() => execute(['pr', 'view', 'x'], fake().run), /pull request number is required/);
-  const cli = spawnSync('node', [SCRIPT, 'nope'], { encoding: 'utf8' });
+  const usage = cli(['nope']);
   // A command line the script cannot act on is a usage error: exit 2, apart from a gh failure (1).
-  assert.equal(cli.status, 2);
-  assert.match(cli.stderr, /usage: forge-github/);
+  assert.equal(usage.status, 2);
+  assert.match(usage.stderr, /usage: forge-github/);
 });
 
 test('empty inline reviews get their comment bodies from one query per PR', () => {
@@ -219,20 +241,14 @@ test('the command line dispatches every subcommand to its function', () => {
 });
 
 test('the CLI prints a body as plain text and answers a held claim with exit 3', () => {
-  const bin = mkdtempSync(join(tmpdir(), 'forge-gh-'));
-  // A stand-in gh on PATH: every view answers the same pull request, held by the processing label.
-  writeFileSync(join(bin, 'gh'), `#!/bin/sh\nprintf '%s' '${JSON.stringify({ ...RAW, body: 'Plain body text' })}'\n`, { mode: 0o755 });
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
-  try {
-    const body = spawnSync('node', [SCRIPT, 'pr', 'body', '7'], { encoding: 'utf8', env });
-    assert.equal(body.status, 0, body.stderr);
-    assert.equal(body.stdout, 'Plain body text');
-    const take = spawnSync('node', [SCRIPT, 'claim', 'take', '7'], { encoding: 'utf8', env });
-    assert.equal(take.status, 3);
-    assert.deepEqual(JSON.parse(take.stdout), { pr: 7, claimed: false, held: true });
-  } finally {
-    rmSync(bin, { recursive: true, force: true });
-  }
+  // Every view answers the same pull request, held by the processing label.
+  const answer = JSON.stringify({ ...RAW, body: 'Plain body text' });
+  const body = cli(['pr', 'body', '7'], { answer });
+  assert.equal(body.status, 0, body.stderr);
+  assert.equal(body.stdout, 'Plain body text');
+  const take = cli(['claim', 'take', '7'], { answer });
+  assert.equal(take.status, 3, take.stderr);
+  assert.deepEqual(JSON.parse(take.stdout), { pr: 7, claimed: false, held: true });
 });
 
 test('a claim edit takes the label with the milestone move in one call, or answers held and edits nothing', () => {
@@ -262,9 +278,9 @@ test('an option without a real value is a usage error, never a silent default', 
   assert.throws(() => execute(['pr', 'edit', '7', '--milestone'], run), /--milestone needs a value/);
   assert.throws(() => execute(['comment', '7', '--body-file', '--draft'], run), /--body-file needs a value/);
   assert.throws(() => execute(['merge', '7', '--method'], run), /--method needs a value/);
-  const cli = spawnSync('node', [SCRIPT, 'threads', '7', '--resolve'], { encoding: 'utf8' });
-  assert.equal(cli.status, 2);
-  assert.match(cli.stderr, /--resolve needs a value/);
+  const usage = cli(['threads', '7', '--resolve']);
+  assert.equal(usage.status, 2);
+  assert.match(usage.stderr, /--resolve needs a value/);
 });
 
 test('a takeover takes a standing claim the contract allows, and only with --claim', () => {
@@ -332,9 +348,9 @@ test('every answer holds the forge contract shape the development pack checks', 
 test('without an operator configuration the script refuses with a usage error', () => {
   const env = { ...process.env };
   delete env.OPERATOR_CONFIG;
-  const cli = spawnSync('node', [SCRIPT, 'claim', 'take', '7'], { encoding: 'utf8', env });
-  assert.equal(cli.status, 2);
-  assert.match(cli.stderr, /OPERATOR_CONFIG/);
+  const usage = cli(['claim', 'take', '7'], { env });
+  assert.equal(usage.status, 2);
+  assert.match(usage.stderr, /OPERATOR_CONFIG/);
 });
 
 test('the example configuration is complete, and a missing required key is refused by name', () => {
@@ -346,9 +362,9 @@ test('the example configuration is complete, and a missing required key is refus
   assert.throws(() => checkOperatorConfig(without((c) => { c.slots = []; })), /missing required key slots/);
   const path = join(CONFIG_DIR, 'incomplete.json');
   writeFileSync(path, JSON.stringify(without((c) => delete c.allowedAuthors)));
-  const cli = spawnSync('node', [SCRIPT, 'claim', 'take', '7'], { encoding: 'utf8', env: { ...process.env, OPERATOR_CONFIG: path } });
-  assert.equal(cli.status, 2);
-  assert.match(cli.stderr, /missing required key allowedAuthors/);
+  const usage = cli(['claim', 'take', '7'], { env: { ...process.env, OPERATOR_CONFIG: path } });
+  assert.equal(usage.status, 2);
+  assert.match(usage.stderr, /missing required key allowedAuthors/);
 });
 
 test('a pull request at the list cap has its whole conversation read, others keep the list answer', () => {
@@ -421,9 +437,9 @@ test('a flag the subcommand does not read is a usage error, never silently ignor
   assert.throws(() => execute(['pr', 'view', '7', '--claim'], run), /pr view does not take --claim/);
   // A value that starts with dashes is still the value of the flag before it.
   assert.equal(execute(['comment', '7', '--body-file', '--titel.md'], run).pr, 7);
-  const cli = spawnSync('node', [SCRIPT, 'pr', 'edit', '7', '--milestone', 'Verification', '--titel', 'x'], { encoding: 'utf8' });
-  assert.equal(cli.status, 2);
-  assert.match(cli.stderr, /does not take --titel/);
+  const usage = cli(['pr', 'edit', '7', '--milestone', 'Verification', '--titel', 'x']);
+  assert.equal(usage.status, 2);
+  assert.match(usage.stderr, /does not take --titel/);
 });
 
 test('gh asks a read again after a network fault, and never repeats a write', () => {

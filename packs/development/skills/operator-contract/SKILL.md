@@ -96,6 +96,17 @@ End by writing exactly one JSON file at the result path:
   asks: a review, a route back to development carrying evidence, an answered question.
 - Evidence is a link or a SHA a reader can open, never pasted log text.
 
+## The manifest
+
+- **An operation names one skill and passes it its input.** A manifest prompt never carries a
+  procedure: the skill is the one place a step is defined, and a procedure restated in a prompt
+  drifts from it.
+- **A pipeline branch runs the skills and rules it was created with.** A change to them applies to
+  branches started after it, never to a run in flight - not through a manifest prompt, not by typing
+  into its session. Only an engine that is unavailable is swapped in the manifest, for every run alike.
+
+Model, effort and retries per operation, and a reference manifest: `references/runtime-manifest.md`.
+
 ## Milestones
 
 A pull request's milestone names the phase that may take it. Skills name the milestones by

@@ -36,7 +36,7 @@ only through profile `forge_cli`.
 | `threads_skill` | the Threads procedure of `git-complete-pr` | the unresolved review threads | one reply per thread, ending with the note marker; no label | answer each thread with its outcome (fixed: the commit; declined: the rule; deferred: the follow-up) and resolve it |
 | `outcome_skill` | `git-complete-pr` | the pull request and the outcome the phase reached | `ai:completed`, `ai:manual` or `ai:failed`, removing `ai:processing` in the same edit; a `## Outcome - MANUAL` / `## Outcome - FAILED` report with its `head:` line for the last two | write exactly one terminal label |
 | `merge_skill` | `git-merge-pr` | an accept-ready pull request | the merge; no label | refuse unless every required check is green on it, no review thread is unresolved, the pull request is mergeable, the state label is `ai:completed` (or there is no `ai:*` label) and every declared factor is fresh at head; then merge by profile `merge_method`, confirm the pull request reads merged and report the merge commit |
-| `sync_base_skill` | `git-sync-base` | the slot, optionally one branch | nothing on the PR | return the slot to the integration branch, fast-forward it, and remove only local branches whose pull request merged (or the named closed one) |
+| `sync_base_skill` | `git-to-base` | the slot, optionally one branch | nothing on the PR | return the slot to the integration branch, fast-forward it, and remove only local branches whose pull request merged (or the named closed one) |
 
 Profile `flow_implement` is the implementation itself: `auto` resolves as core does (the project's
 own execution skill when one is installed, else one subagent working to the plan's slices); a skill

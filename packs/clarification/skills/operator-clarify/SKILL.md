@@ -23,7 +23,7 @@ factors: the owner's answers are its review, and the owner does not read it agai
 
 1. **Read the live state.** `<slot>` is `input.member`, or the checkout's own name when run by
    hand. Require a clean slot no open pipeline PR holds (its branch names the slot), then run
-   profile `sync_base_skill` (default `git-sync-base`).
+   profile `sync_base_skill` (default `git-to-base`).
 2. **Pick one item.** Re-read each of `input.candidates` (by hand: profile `operator_discover
    --standalone` lists none, so rank the queue's items waiting on a decision the way profile
    `flow_queue` orders them) on the freshly fetched integration branch. Drop one no longer waiting

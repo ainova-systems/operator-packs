@@ -24,7 +24,7 @@ the `operator-contract` skill first: input, result, claim and markers follow it.
    `owner:onhold`, or another run's `ai:processing` (a HELD report, `operator-contract`) ends `noop` with its reason. Cancellation
    outranks rejection; without either label, `noop`. Require a clean slot; preserve foreign work.
    With `input.handoff`, adopt that pull request instead (step 7).
-2. **Read the queue.** For `queue`, run profile `sync_base_skill` (default `git-sync-base`), then re-read all open PRs, their queue
+2. **Read the queue.** For `queue`, run profile `sync_base_skill` (default `git-to-base`), then re-read all open PRs, their queue
    references and changed files (profile `forge_cli pr list` and `pr files <n>`). Check that `<slot>` is free: no open PR in a pipeline milestone has a branch naming it
    (`operator_config` `slots` lists the slots; a PR holds its slot from intake until it merges or
    closes). Read candidates on the freshly fetched integration branch,

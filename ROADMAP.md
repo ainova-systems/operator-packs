@@ -129,7 +129,10 @@ waiting on a draft's CI in the same change. Held back from this release because
 
 **Problem.** CONTRIBUTING requires a key shared with core to be restated with core's default, and
 `validate-pack.sh` compares the two only when core's schema sits in `packs/core` - which in this
-repository it never does, so the check never runs.
+repository it never does, so the check never runs. The digest algorithm the discovery contract
+states in full is the same kind of restatement, and nothing compares it with core's either: the two
+had already drifted once.
 
 **Shape.** Compare against core's schema at a pinned core version (fetched in CI), failing on a
-different default.
+different default; for the digests, one shared test vector - a body, a checks file and the digest
+both must print.

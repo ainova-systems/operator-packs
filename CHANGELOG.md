@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Implementation rounds have a budget, the digests are core's, and a reference manifest says what each operation runs on.
+Implementation rounds have a budget, the digests match core's, and a reference manifest says what each operation runs on.
 
 ### Added
 
@@ -19,7 +19,7 @@ Implementation rounds have a budget, the digests are core's, and a reference man
 
 ### Changed
 
-- The steps and body digests are core's `git-verify-pr` > Digests, cited instead of restated: the steps digest includes the standing checks profile `qa_checks` matches, and the blocks removed are profile `digest_exclude`'s (both keys restated with core's defaults).
+- The steps and body digests, still stated here in full so the pack runs without core, match core's `git-verify-pr` > Digests again: the steps digest includes the standing checks profile `qa_checks` matches, and the blocks removed are profile `digest_exclude`'s (both keys restated with core's defaults).
 - A verification step sent back as defective may also be corrected where it asks for what verification cannot do, as core's `git-finalize-pr` > The round, step 5 allows; a step that ran and failed is a code defect, and changing its conditions or expected result stays the owner's decision.
 - `references/pr-state.md` is the state page core's `git-workflow` lets a scenario pack keep for its own runs, and its `claims` record is the runtime claims record core recognises; it no longer calls the takeover an operator extension.
 - Profile `draft_ready` is restated with core's default and meaning: in the operator flow a draft is marked ready only by `operator-verify`'s QA admission, so a project that sets `readyLimit` sets `draft_ready: owner`.

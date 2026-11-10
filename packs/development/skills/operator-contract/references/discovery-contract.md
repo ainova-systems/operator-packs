@@ -124,12 +124,23 @@ puts it in `input.qa` (`passed`, `pending`, `failed`, `none`), and asks for rows
 
 ## The steps digest
 
-Both digests are core's, defined once in `git-verify-pr` > Digests (the core pack of
-intelligence-dev-packs; read it there when core is not installed), so a digest discovery prints and
-one a core stage writes on its report's `head:` line are the same digest. Discovery follows it
-exactly: the blocks profile `digest_exclude` names are removed first, the verification section is
-the one profile `verify_section` heads, and the steps digest takes the standing checks profile
-`qa_checks` matches to the pull request's files after the section's lines.
+Both digests are stated here in full because core is optional; their algorithm is core's
+definition, `git-verify-pr` > Digests, and must match it wherever both packs are installed, so a
+digest discovery prints and one a core stage writes on its report's `head:` line are the same digest.
+
+1. From the pull request body remove every block profile `digest_exclude` names. Its value lists
+   blocks separated by `;`, each a start marker and an end marker in backticks joined by `..`;
+   `none` removes nothing. Remove each `start` through the next `end`, both markers included, every
+   occurrence, scanning left to right and resuming after each removed `end`; a `start` with no `end`
+   after it removes nothing. A status block CI rewrites inside the body would otherwise change the
+   digest after every CI run.
+2. The verification section runs from the line that is exactly `## <profile verify_section>` to
+   the line before the next line starting `## `, or the end. No such line: the steps digest is
+   `none`, and the body digest covers the whole body.
+3. Take the lines of that section after its heading, then each standing check profile `qa_checks`
+   matches to the pull request's files, as that file writes it - from its glob line to the line
+   before its *Why* line - in the file's order; join with `\n`; trim.
+4. The digest is the first 12 hexadecimal characters of that text's SHA-256 (UTF-8).
 
 `operator_config` `digestExclude` is deprecated: the blocks are profile `digest_exclude`'s. While a
 configuration still sets `digestExclude`, it names the same blocks in the same order, and discovery
@@ -137,6 +148,9 @@ refuses to print a digest when the two differ, naming both (`digestExclusions`, 
 
 ## The body digest
 
+The steps digest's step 1, then the body without its verification section (step 2), heading
+included - the whole body when there is none - joined with `\n` and trimmed, digested as its
+step 4. A checked box in that section or a CI-written block therefore does not re-run the review.
 `--body <path>` digests that file instead of the live body (`operator-review`). A passing
 review's body digest is the one its `<!-- operator:reviewed <digest> -->` note names. A passing
 review at the head without that note is fresh by head alone, its body being unknown: that is review

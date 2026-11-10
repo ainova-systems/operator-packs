@@ -222,7 +222,11 @@ input starts the phase operation again.
 Profiles `review_skill` and `verify_skill` run where profile `judge_runner` says: `none` (or unset) runs
 them in this session; a skill name runs them through that skill in another engine,
 read-only, and the operator skill posts the report unchanged and writes the factor its verdict earns.
-An engine that is unavailable ends the run `failed` with `retryable: true`; nothing stands in for it.
+An engine that is unavailable (a usage limit, a lost login) ends the run `failed` with
+`retryable: true`, unless profile `judge_fallback` is `native`: then a fresh subagent of this
+session's own engine runs the stage instead - read-only, with only the stage's input, never the
+context of the session that wrote the change - and the report's findings open with one line saying
+which engine judged and why. Its verdict earns the factor like any other.
 
 The runtime's review job writes its findings file (`input.output`) as JSON:
 

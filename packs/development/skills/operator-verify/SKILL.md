@@ -60,7 +60,7 @@ of `operator.yaml`. Load the `operator-contract` skill first.
    report is posted: profile `qa_feedback_status` completed, with one line in the submitter's
    language saying what changed for them - no PR, path or code names. A ticket the head does not
    fix stays open and is routed by step 4; one that reports no defect is an owner question, never
-   closed by the pipeline. Hold the checkout, refs and deployment still while it judges. Its engine unavailable → release the claim and end `failed`, `retryable: true`.
+   closed by the pipeline. Hold the checkout, refs and deployment still while it judges. Its engine unavailable → profile `judge_fallback` `native` judges in a fresh subagent (`operator-contract` > Judging stages); otherwise release the claim and end `failed`, `retryable: true`.
 7. **Complete or yield.** Re-read owner input, the freshness of every factor profile
    `pr_success_factors` declares, and CI at the same head. New
    input is triaged first. A missing or stale review returns to `development` through step 4, so

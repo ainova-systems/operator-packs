@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The `codeReview` milestone role. `operator-implement` hands a pushed head over by moving the pull request to it, and `operator-review` moves it on: to verification after a `CLEAN` review of a head handed over `final` (the plan complete, nothing left but review and CI), to development otherwise. A finished head therefore waits for CI in verification, where `operator-verify` already waits for it and returns a red head to development; before, it waited in development.
+- Discovery row 11a: a pull request left in `codeReview` with no job covering it asks `implement` (`reason: review`), which moves it back to development and hands its head to review again.
+
+**Updating:**
+
+- Add `"codeReview": "<title>"` to `operator_config` `milestones` (it is required) and create that milestone; a project discovery routes it as row 11a says. A pull request already handed to review in development finishes its round there.
+
 ## [0.17.2] - 2026-11-10
 
 ### Fixed

@@ -2,6 +2,7 @@
   "milestones": {
     "queue": "In Queue",
     "development": "Development",
+    "codeReview": "Code Review",
     "verification": "Verification",
     "humanReview": "Human Review",
     "mergeQueue": "Merge Queue",

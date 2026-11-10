@@ -118,7 +118,7 @@ pull request. A contract case in `scripts/discovery-contract.mjs` for whichever 
 **Problem.** Core's `git-finalize-pr` > CI green says nothing a draft reports is evidence. With
 `operator_config` `readyLimit` set, a pull request stays a draft through development, and
 `operator-implement` steps 3 and 6 still read its checks: red CI is pending work and green CI is a
-condition of the move to verification.
+condition of its move to verification (`operator-review`'s move of a `final` head needs no CI).
 
 **Shape.** On a draft, the move to verification needs the review only, and `operator-verify` judges
 CI after its admission marks the draft ready (its step 7 already does); discovery's row 11 stops

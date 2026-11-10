@@ -31,8 +31,8 @@ queue item in one session instead of phase by phase.
 | `operator-contract` | - | the run contract every phase skill loads first |
 | `operator-intake` | the work queue, or a handed-off pull request → `queue` (In Queue) | a queue item has its pull request, or the handed-off one sits in a slot |
 | `operator-plan` | `queue` (In Queue) | the plan and its verification steps are committed |
-| `operator-implement` | `development` (Development) | the plan is complete, the head is reviewed and CI is green |
-| `operator-review` | `development` (Development) | the runtime's review is posted (runtime only) |
+| `operator-implement` | `development` (Development) | a pushed head goes to review; the plan is complete, the head is reviewed and CI is green |
+| `operator-review` | `codeReview` (Code Review) | the runtime's review is posted: findings return it to Development, a clean review of a finished head sends it to Verification (runtime only) |
 | `operator-verify` | `verification` (Verification) | profile `verify_skill` passed and profile `outcome_skill` wrote `ai:completed` |
 | - (the owner) | `humanReview` (Human Review) | feedback returns it to Verification; `owner:accepted` sends it to merge |
 | `operator-merge` | `mergeQueue` (Merge Queue) | merged |
@@ -73,10 +73,11 @@ sequenceDiagram
 
     loop each round, until the plan is complete, reviewed and green
         RT->>C: operator-implement (flow_implement, commit_skill)
+        C->>GH: Code Review
         RT->>J: review_skill, read-only
         RT->>C: operator-review (report, ai:reviewed)
+        C->>GH: Development, or Verification after a clean final review
     end
-    C->>GH: Verification
 
     RT->>C: operator-verify
     C->>J: verify_skill on QA (judge_runner)

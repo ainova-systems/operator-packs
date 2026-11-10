@@ -7,11 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.17.1] - 2026-11-10
+## [0.17.2] - 2026-11-10
 
 ### Fixed
 
 - Adopting a handed-off pull request no longer closes it. The platform closes a pull request whose head branch is renamed, so `operator-intake` keeps the branch name and binds the pull request to its slot with an `<!-- operator:slot <slot> -->` comment; a pull request's slot is the one that comment names, else the one its branch names. The forge script's `branch rename` is removed.
+
+## [0.17.1] - 2026-11-10
+
+### Fixed
+
+- Profile `sync_base_skill` defaults to core's `git-to-base`, the name core 0.17.0 gave `git-sync-base`; with the old default, intake, merge and clarification called a skill core no longer ships.
+
+**Updating:**
+
+- On core before 0.17.0, set profile `sync_base_skill: git-sync-base`.
 
 ## [0.17.0] - 2026-11-10
 

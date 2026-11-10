@@ -12,7 +12,7 @@ Merge applies the owner's acceptance to one verified head; it is the `merge` ope
 | Contract | |
 |---|---|
 | Trigger | `owner:accepted` on a `humanReview` or `mergeQueue` PR |
-| Work | validate the acceptance and the live evidence; profile `merge_skill` (default `git-merge-pr`); profile `sync_base_skill` (default `git-sync-base`) |
+| Work | validate the acceptance and the live evidence; profile `merge_skill` (default `git-merge-pr`); profile `sync_base_skill` (default `git-to-base`) |
 | Evidence | confirmed merge commit SHA and PR URL |
 | Next | merged → `done`; stale or blocked → one marked refusal comment, `noop` |
 

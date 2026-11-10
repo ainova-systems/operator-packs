@@ -23,7 +23,7 @@ description: Project profile keys the operator packs' skills read, with their de
 - direct_lane: none                  <!-- the documents that need no reviewed pull request, as gitignore-style patterns, comma-separated, no brace expansion, **/ also matching the root: operator-intake and operator-clarify commit a queue record straight to the integration branch only when every path it changes matches, and operator-clarify merges a clarification pull request on its own only when every path it changes matches; none = no path matches: queue records go through a pull request, and clarify never merges on its own but asks the owner to set this key -->
 - flow_plan: none                    <!-- the skill that writes a feature-sized plan; none = the plan goes on the queue item -->
 - judge_runner: none                 <!-- where review_skill and verify_skill run: none = in the session | <skill> that runs them read-only in another engine -->
-- judge_fallback: none               <!-- when judge_runner's engine is unavailable: none = the run fails retryable and waits | native = a fresh read-only subagent of the session's engine judges, and the report says so -->
+- judge_fallback: none               <!-- when judge_runner's engine is unavailable: none = the run fails retryable and waits | native = a fresh subagent of the session's engine judges with the engine's inputs and write limits, and the report says so -->
 
 ## Delegated steps
 

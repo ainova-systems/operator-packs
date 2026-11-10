@@ -227,13 +227,13 @@ change: a usage limit, a lost login, not installed, an outage - ends the run `fa
 `retryable: true`, unless profile `judge_fallback` is `native` (irrelevant when `judge_runner` is
 `none`): then a fresh subagent of this session's own engine runs the same stage on the same inputs the
 engine would have had - the diff, body and pull request for a review; the steps, the QA deployment and
-the head for a verification - with the same write limits (none for a review, the scratch folder for a
-verification), never the context of a session that wrote the change. A partial or malformed answer
+the head for a verification - with the same write limits (none for a review; for a verification, only the folder its `judge_runner` skill
+writes to), never the context of a session that wrote the change. A partial or malformed answer
 from the unavailable engine is discarded, not reused. The envelope and verdicts are unchanged; the
 subagent writes one line right after the `head:` line naming the engine that judged and why. Its
 verdict earns the factor like any other, though a judgment from the engine that wrote the change is
-weaker than one from another engine. In the runtime the `review` job is the manifest's: its own
-`fallback` decides who reviews when its engine is unavailable, and `operator-review` posts what it
+weaker than one from another engine. In the runtime the `review` job is the manifest's: its operation's `fallback` key (the
+runtime's README; unset, the job fails retryable and waits) decides who reviews when its engine is unavailable, and `operator-review` posts what it
 produced; this key governs every judging stage a skill runs through `judge_runner`, by hand included.
 
 The runtime's review job writes its findings file (`input.output`) as JSON:

@@ -38,7 +38,7 @@ description: Project profile keys the operator packs' skills read, with their de
 - threads_skill: none                <!-- answer and resolve review threads; none = the Threads procedure of git-complete-pr -->
 - outcome_skill: none                <!-- write a run's terminal state label; none = git-complete-pr -->
 - merge_skill: none                  <!-- the merge behind its guards; none = git-merge-pr -->
-- sync_base_skill: none              <!-- return a slot to the integration branch; none = git-sync-base -->
+- sync_base_skill: none              <!-- return a slot to the integration branch; none = git-to-base (core 0.17.0 on; with an earlier core set git-sync-base) -->
 
 ## Shared with core
 

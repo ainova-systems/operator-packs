@@ -140,39 +140,47 @@ const indentOf = (line) => {
   }
   return width;
 };
-const LIST_ITEM = /^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/;
+// A list item: its marker and the spaces after it, which set where the item's content starts.
+const LIST_ITEM = /^[ \t]*([-*+]|\d{1,9}[.)])([ \t]+|$)/;
 
 /**
  * A Markdown body without its fenced and indented code, code spans and HTML comments: the platform reads
- * no reference in them. Indented lines inside a list are list content, not code.
+ * no reference in them. Code inside a list item is indented relative to the item's content. An
+ * approximation of the platform's parser, with no dependency: lists are tracked one level at a time.
  */
 function proseOf(body) {
   const prose = [];
   let fence = null;
-  let indented = false;
+  let codeAt = null;
+  let contentAt = null;
   let afterBlank = true;
-  let inList = false;
-  for (const line of String(body ?? '').replace(/<!--[\s\S]*?(?:-->|$)/g, ' ').split('\n')) {
+  for (const line of String(body ?? '').replace(/\r\n?/g, '\n').replace(/<!--[\s\S]*?(?:-->|$)/g, ' ').split('\n')) {
     const blank = line.trim() === '';
+    const width = indentOf(line);
     if (fence) {
-      const close = /^ {0,3}(`+|~+)[ \t]*$/.exec(line)?.[1];
-      if (close && close[0] === fence[0] && close.length >= fence.length) fence = null;
+      const close = /^(`+|~+)[ \t]*$/.exec(line.trimStart())?.[1];
+      if (close && width < fence.at + 4 && close[0] === fence.marker[0] && close.length >= fence.marker.length) fence = null;
       continue;
     }
-    if (indented && (blank || indentOf(line) >= 4)) continue;
-    indented = false;
-    if (!blank && afterBlank && !inList && indentOf(line) >= 4) {
-      indented = true;
+    if (codeAt !== null && (blank || width >= codeAt + 4)) continue;
+    codeAt = null;
+    const item = width < (contentAt ?? 0) + 4 ? LIST_ITEM.exec(line) : null;
+    // A blank line, then a line indented less than the item's content, ends the list.
+    if (!blank && !item && afterBlank && contentAt !== null && width < contentAt) contentAt = null;
+    const base = contentAt ?? 0;
+    if (!blank && !item && afterBlank && width >= base + 4) {
+      codeAt = base;
       continue;
     }
     // A backtick fence's info string holds no backtick: ```x``` on its own line is a code span.
-    const open = /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})/.exec(line)?.[1];
+    const open = width < base + 4 ? /^(`{3,}(?=[^`]*$)|~{3,})/.exec(line.trimStart())?.[1] : null;
     if (open) {
-      fence = open;
+      fence = { marker: open, at: base };
       afterBlank = false;
       continue;
     }
-    if (!blank) inList = LIST_ITEM.test(line) || (inList && indentOf(line) > 0);
+    // Five or more spaces after the marker are one space and indented code.
+    if (item) contentAt = width + item[1].length + (item[2].length >= 1 && item[2].length <= 4 ? item[2].length : 1);
     afterBlank = blank;
     prose.push(line);
   }

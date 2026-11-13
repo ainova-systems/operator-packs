@@ -483,6 +483,12 @@ test('a pull request body closes the issues a closing keyword names outside code
   // Indented code after a blank line closes nothing; an indented paragraph continuation or list content does.
   assert.deepEqual(closesOf('    Closes #1\n\n\tCloses #2'), []);
   assert.deepEqual(closesOf('text\n    Closes #3\n- item\n\n    Closes #4'), [3, 4]);
+  // Code inside a list item is indented from the item's content, nested items included.
+  assert.deepEqual(closesOf('- Example:\n\n      Closes #11\n\n  Closes #12'), [12]);
+  assert.deepEqual(closesOf('1. item\n   - sub\n\n         Closes #13\n\n       Closes #14'), [14]);
+  assert.deepEqual(closesOf('1.  item\n\n    ```\n    Closes #15\n    ```\nCloses #16'), [16]);
+  // Bodies written in a browser end their lines with CRLF.
+  assert.deepEqual(closesOf('```\r\nexample\r\n```\r\nCloses #17'), [17]);
   // A backtick run with backticks after it on the line is a code span, not a fence that hides the rest.
   assert.deepEqual(closesOf('```example```\nCloses #5 ``a`b``'), [5]);
   // This repository's issues by qualified name or URL, never another repository's.

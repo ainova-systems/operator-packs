@@ -487,6 +487,9 @@ test('a pull request body closes the issues a closing keyword names outside code
   assert.deepEqual(closesOf('- Example:\n\n      Closes #11\n\n  Closes #12'), [12]);
   assert.deepEqual(closesOf('1. item\n   - sub\n\n         Closes #13\n\n       Closes #14'), [14]);
   assert.deepEqual(closesOf('1.  item\n\n    ```\n    Closes #15\n    ```\nCloses #16'), [16]);
+  // A paragraph back in the parent item after a nested one is prose; a fence may open on the marker line.
+  assert.deepEqual(closesOf('1.  Summary\n    - Detail\n\n    Closes #18'), [18]);
+  assert.deepEqual(closesOf('- ```text\n  Closes #19\n  ```\n\nCloses #20\n- Fixes #21'), [20, 21]);
   // Bodies written in a browser end their lines with CRLF.
   assert.deepEqual(closesOf('```\r\nexample\r\n```\r\nCloses #17'), [17]);
   // A backtick run with backticks after it on the line is a code span, not a fence that hides the rest.

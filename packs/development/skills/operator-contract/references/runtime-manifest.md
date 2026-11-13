@@ -37,6 +37,8 @@ that operation to the account's default.
 | `implement` | `operator-implement` | claude | opus | high | it orchestrates profile `flow_implement` and fixes what the stages sent back; its subagents keep their own tier and effort |
 | `review` | profile `review_skill` | another engine than `implement`'s | the reviewer agent's tier: standard, as core sets it on `dev-code-reviewer` | the reviewer agent's effort: high, as core sets it there | an independent judge: a judgment from the engine that wrote the change is weaker (`operator-contract` > Judging stages); the tier and effort are core's choice, made and changed on the agent, never here |
 | `review-verdict` | `operator-review` | claude | sonnet | low | it posts a finished report unchanged and writes the label it earns, with no judgment of its own |
+| `product-review` | profile `product_review_skill` | another engine than `plan`'s and `implement`'s | the product reviewer agent's tier | the product reviewer agent's effort | an independent judge of the solution as product; with the key unset the operation is left out |
+| `product-review-verdict` | `operator-product-review` | claude | sonnet | low | like `review-verdict`: it posts a finished report and routes it, with no judgment of its own |
 | `verify` | `operator-verify` | claude | sonnet | high | it triages owner input and tickets and routes fixes; the judging is profile `verify_skill`'s, through profile `judge_runner` |
 | `merge` | `operator-merge` | claude | sonnet | high | its guards are mechanical, but profile `merge_gates` are rules read against the diff, and it is the last gate before the merge |
 | `clarify` (clarification pack) | `operator-clarify` | claude | opus | high | it proposes resolutions and phrases questions the owner answers directly |
@@ -54,7 +56,9 @@ is the one most often unavailable, takes `retries: 4`. A retried run re-reads th
 - Discovery is `exclusive: true`: two passes at once would ask for the same work twice.
 - The review runs `access: read` in the pull request's own slot, at the head `implement` pushed.
 - `then: review-verdict` starts the verdict with the review job's own input plus `output`, so
-  `checkout`, `body` and `final` reach `operator-review` unchanged.
+  `checkout`, `body` and `final` reach `operator-review` unchanged; `then: product-review-verdict`
+  does the same for `mode`. The product review runs `access: read` in the slot like the review, and
+  takes the review's `retries`.
 - `kind: interactive` with `placement: herdr` lets the owner attend a session in a terminal tab;
   `kind: agent` runs headless. The example uses `agent` so it validates without herdr.
 - With the clarification pack: a pool of the slots `operator_config` `clarifySlots` names, and a

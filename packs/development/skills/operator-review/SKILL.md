@@ -15,7 +15,7 @@ operation of `operator.yaml`. Load the `operator-contract` skill first.
 | Trigger | The runtime's `review` job finished; `input.output` is its findings file at `input.head`, `input.checkout` the PR's slot it judged |
 | Work | post the report unchanged; `ai:reviewed` and the body note when no Critical stands |
 | Evidence | the `## Code review - …` comment at `head:` |
-| Next | a `CLEAN` review of a head handed over `final` → `verification`; otherwise `development`, where `implement` runs as discovery asks it: on findings, owner input or decided CI, never while CI runs after a clean review |
+| Next | a `CLEAN` review of a head handed over `final` → `verification`, or first the change review (`product-review`) when one is due; otherwise `development`, where `implement` runs as discovery asks it: on findings, owner input or decided CI, never while CI runs after a clean review |
 
 ## Steps
 
@@ -40,13 +40,17 @@ operation of `operator.yaml`. Load the `operator-contract` skill first.
    - to the verification milestone when the verdict is `CLEAN` with no finding, `input.final` is true,
      no review thread is unresolved (profile `forge_cli threads <n> --unresolved`) and no owner input
      follows the report (profile `operator_discover --owner-input <n>`): the head is finished, and
-     `operator-verify` waits for CI and QA, returning it to development when either fails;
+     `operator-verify` waits for CI and QA, returning it to development when either fails. When
+     profile `product_review_skill` is set and no `## Product review (change)` report stands in this
+     cycle, the finished head goes to the change review first instead: the edit only drops the claim,
+     leaving the pull request in `codeReview`, and the run ends `done` asking for it
+     (`operator-contract` > Product review), with `input.body` as its body;
    - otherwise to the development milestone. Discovery asks implementation for a head with
      findings, owner input or CI that has decided, and for nothing while CI still runs after a clean
      review. Only implementation knows whether every planned slice has shipped, so the move to
      verification here rests on its `final`.
-5. **Remove the body file** (`input.body`) once the report is posted or the run ends `noop`; the slot
-   stays on the PR branch (`operator-contract`).
+5. **Remove the body file** (`input.body`) once the report is posted or the run ends `noop`, unless
+   step 4 handed it to the change review; the slot stays on the PR branch (`operator-contract`).
 
 ## Run by hand
 
@@ -59,7 +63,8 @@ Nothing to post without a runtime review: run profile `review_skill` through pro
   Critical finding does; a pass carries the `operator:reviewed` note whenever discovery answers
   `--body-digest`.
 - The pull request left `codeReview`: for verification only on a `CLEAN` review of a `final` head
-  with no unresolved thread or owner input, for development otherwise.
+  with no unresolved thread or owner input, for development otherwise - or it stays there, unclaimed,
+  with the change review asked for that finished head.
 
 ## Scope / hand-off
 

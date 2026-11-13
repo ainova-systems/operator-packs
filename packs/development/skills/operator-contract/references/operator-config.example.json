@@ -16,7 +16,8 @@
     "rejected": "owner:rejected",
     "cancelled": "owner:cancelled",
     "question": "owner:question",
-    "handoff": "pipeline:handoff"
+    "handoff": "pipeline:handoff",
+    "approved": "ai:approved"
   },
   "allowedAuthors": ["OWNER", "MEMBER", "COLLABORATOR"],
   "slots": ["d1", "d2", "d3"],

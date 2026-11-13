@@ -82,6 +82,8 @@ A gate reads a stage's latest report and compares every input it names with the 
 | `## Code review - …` | `CLEAN`, `PASS-WITH-WARNINGS`, `BLOCK` | `ai:reviewed` on the first two |
 | `## Verification - …` | `PASS`, `FAIL`, `BLOCKED (...)` | `ai:verified` on `PASS` only |
 | `## Outcome - …` | `MANUAL`, `FAILED` | written with `ai:manual` / `ai:failed`, one line per decision or failure |
+| `## Product review (plan) - …`, `head: <sha> - plan: <digest>` | `PROCEED`, `RETURN` | none |
+| `## Product review (change) - …`, `head: <sha> - body: <digest>` | `APPROVE`, `RETURN` | the `approved` role (default `ai:approved`) follows the newest: added on `APPROVE`, removed on `RETURN`; no success factor, written only beside another `ai:*` label (`operator-contract` > Product review) |
 | `## <Stage> - HELD` | - | none; the refusal above |
 
 A stage that could not judge says so instead of passing.

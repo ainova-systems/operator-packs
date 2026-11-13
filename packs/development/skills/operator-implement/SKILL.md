@@ -16,7 +16,7 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
 | Trigger | A PR in the development milestone with implementation, CI, review, verification or owner work pending; a PR left in `codeReview` with no review running; a PR in any later milestone that conflicts with the integration branch |
 | Work | one `flow_implement` round ending at profile `commit_skill` (default `git-commit-push`); profile `threads_skill` (default: the Threads procedure of `git-complete-pr`) for review threads |
 | Evidence | pushed head SHA and PR URL |
-| Next | pushed or unreviewed → `codeReview`, `review`; complete, reviewed and green → `verification`, `verify`; CI pending → `noop` |
+| Next | pushed or unreviewed → `codeReview`, `review`; complete, reviewed and green → `verification`, `verify`, or first `codeReview`, `product-review` when the change review is due; CI pending → `noop` |
 
 ## Steps
 
@@ -28,7 +28,8 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
    belong to intake. So does an `ai:manual` or `ai:failed` no owner input follows (profile
    `operator_discover --owner-input <n>` lists none after its `## Outcome` report): it waits for the owner.
 2. **Claim the PR in its slot.** A PR in `codeReview` moves back to the development milestone in
-   the claim edit, and step 5 hands its head to review again. A conflicting PR from a later milestone moves back to the
+   the claim edit, and step 5 hands its head to review again - or step 6 to the change review, when
+   a code review of the head stands and the change review's chain stopped. A conflicting PR from a later milestone moves back to the
    development milestone in the claim edit, removing an obsolete `ai:completed`: the merged head is
    reviewed and verified again on its way back. The claim edit also removes an `ai:manual` or
    `ai:failed` the owner has answered. Reconcile the slot with the live head
@@ -42,7 +43,10 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
    commit do not count); CI red at the head; actionable findings in the latest `## Code review`
    report at the head; a fix verification sent back (`input.evidence`: a failing `## Verification`
    report, an owner comment or a QA ticket); owner input newer than the last stage report;
-   unresolved review threads; plan slices not yet shipped; a conflict with the integration branch.
+   unresolved review threads; plan slices not yet shipped; a conflict with the integration branch;
+   a `## Product review (change) - RETURN` report in this cycle (`operator-contract` > Product
+   review) that no push and no note has answered since - its blockers and concerns, once: fix each,
+   or decline it with its reason in one note.
    The plan is on the queue item (or profile `flow_plan`'s file); a pull request without a queue item
    keeps it in its body's `## Plan` section, and a handed-off one plans only the remaining work from
    its current head, whose existing commits count as implementation.
@@ -101,6 +105,10 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
    squash publishes it): profile `forge_cli pr edit <n> --milestone "<verification title>"
    --remove-label ai:processing --title "<title>"`. The body stays as the review judged it (step 5). Then the
    hand-off request (`operator-contract`). CI still running → release the claim, `noop` naming it.
+   When profile `product_review_skill` is set and no `## Product review (change)` report stands in
+   this cycle, the finished head goes to the change review first instead: write the live body beside
+   the checkout as step 5 does, make the same edit with the `codeReview` milestone in place of
+   verification, and end `done` asking for it (`operator-contract` > Product review).
 7. **Leave the slot on the PR branch** at the head this run pushed, or with what it could not push
    committed on top (`operator-contract`); keep the body file for the review.
 
@@ -108,7 +116,9 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
 
 `/operator-implement <n>`. Step 5 then runs profile `review_skill` (default `git-review-pr`) itself, through profile `judge_runner`,
 instead of handing the head to the runtime, and posts its report, label and body note as
-`operator-review` step 3 does; repeat until step 6 moves the PR on. By hand no runtime review is
+`operator-review` step 3 does; a change review step 6 finds due runs profile `product_review_skill`
+the same way and is recorded as `operator-product-review` step 3 does; repeat until step 6 moves the
+PR on. By hand no runtime review is
 coming, so step 5 leaves the PR in development, and step 1 takes a PR in `codeReview` without
 `input.reason`.
 
@@ -117,13 +127,15 @@ coming, so step 5 leaves the PR in development, and step 1 takes a PR in `codeRe
 - After a round the pushed head is the pull request's head, the pull request sits in `codeReview`,
   and the result asks for `review` at it.
 - A move to verification happens only with a review report at the head with no Critical finding,
-  every declared factor fresh and CI green on that head.
+  every declared factor fresh and CI green on that head, and - with profile `product_review_skill`
+  set - a change report standing in this cycle.
 - No round ran past the budget; a spent one left an `## Outcome` report naming it.
 
 ## Scope / hand-off
 
-- Review is the runtime's `review` job, posted by `operator-review`; verification is
-  `operator-verify`; the work itself is profile `flow_implement`.
+- Review is the runtime's `review` job, posted by `operator-review`; the change review is its
+  `product-review` job, posted by `operator-product-review`; verification is `operator-verify`; the
+  work itself is profile `flow_implement`.
 
 ## Constraints
 

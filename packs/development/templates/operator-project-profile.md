@@ -39,6 +39,7 @@ description: Project profile keys the operator packs' skills read, with their de
 - outcome_skill: none                <!-- write a run's terminal state label; none = git-complete-pr -->
 - merge_skill: none                  <!-- the merge behind its guards; none = git-merge-pr -->
 - sync_base_skill: none              <!-- return a slot to the integration branch; none = git-to-base (core 0.17.0 on; with an earlier core set git-sync-base) -->
+- product_review_skill: none         <!-- the product review of a plan and of a finished change, run read-only by the runtime's product-review operation and posted by operator-product-review (operator-contract > Product review); none = no product review stage -->
 
 ## Shared with core
 

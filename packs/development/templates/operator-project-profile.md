@@ -60,4 +60,4 @@ description: Project profile keys the operator packs' skills read, with their de
 - merge_method: squash               <!-- how merge_skill merges: squash | merge | rebase -->
 - flow_intake: auto                  <!-- the capture step operator-plan runs: auto = the project's intake skill, else the core pack's dev-deliver Phase A interview | <skill name> -->
 - flow_implement: auto               <!-- the implementation: auto = the project's own execution skill when one is installed, else one subagent working to the plan's slices | <skill name> -->
-- flow_queue: none                   <!-- where the work queue's pick order, eligibility, grouping and leave-the-queue rules are written -->
+- flow_queue: none                   <!-- where the work queue's pick order, eligibility, grouping and leave-the-queue rules are written; it places the issue source (operator_config issues) when the project has one -->

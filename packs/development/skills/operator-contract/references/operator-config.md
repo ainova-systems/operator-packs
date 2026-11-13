@@ -28,7 +28,8 @@ Default label names: `processing` `ai:processing`, `accepted` `owner:accepted`, 
 | `clarifySlots` | `[]` (no clarification) | Slots that only clarify queue items waiting on an owner decision; requires `milestones.clarification` |
 | `clarifyCandidates` | `5` | How many ranked clarification candidates discovery offers |
 | `readyLimit` | unset (no QA admission: pull requests open ready) | How many ready pull requests may hold a QA environment at once; intake then opens drafts and `operator-verify` promotes the oldest |
-| `quotas` | `{}` | Open pipeline pull requests allowed per queue source, `{ "<source>": <n> }` |
+| `quotas` | `{}` | Open pipeline pull requests allowed per queue source, `{ "<source>": <n> }`; the issue source counts the pull requests that close a queue issue |
+| `issues` | unset (no issue queue) | `{ "label": "<label>", "source": "<name>" }`: open issues carrying the label are queue items of that source, in the place profile `flow_queue` gives the source (last when it names none). Only a trusted issue is taken (`forge-contract.md` > Trust); `label` and `source` are both required once the key is set |
 | `ciWorkflows` | every workflow run on the head | The workflow names whose runs decide CI for a head |
 | `questionMarker` | `operator:question` | The marker an owner question carries (`operator-contract` > Asking the owner) |
 | `pipelineMarkers` | `["<!-- operator:"]` | Substrings that mark a comment as the pipeline's own, never owner input; add the markers your CI comments carry, and keep `<!-- operator:` |

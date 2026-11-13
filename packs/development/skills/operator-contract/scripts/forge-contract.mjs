@@ -4,6 +4,7 @@
 const isString = (value) => typeof value === 'string';
 const isNullableString = (value) => value === null || typeof value === 'string';
 const oneOf = (...values) => (value) => values.includes(value);
+const isNumberList = (value) => Array.isArray(value) && value.every(Number.isInteger);
 
 function check(kind, value, fields) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${kind}: expected an object, got ${JSON.stringify(value)}`);
@@ -26,8 +27,17 @@ const SHAPES = {
     number: Number.isInteger, url: isString, title: isString, body: isString, draft: (v) => typeof v === 'boolean',
     state: oneOf('open', 'merged', 'closed'), head: (v) => isString(v?.ref) && isString(v?.sha), base: (v) => isString(v?.ref),
     mergeable: oneOf('clean', 'conflicting', 'unknown'), labels: (v) => Array.isArray(v) && v.every(isString),
-    milestone: isNullableString, createdAt: isString, author: isNullableString,
+    milestone: isNullableString, createdAt: isString, author: isNullableString, closes: isNumberList,
   }),
+  issue: (kind, value) => check(kind, value, {
+    number: Number.isInteger, url: isString, title: isString, body: isString, state: oneOf('open', 'closed'),
+    stateReason: (v) => v === null || ['completed', 'not_planned', 'reopened', 'duplicate'].includes(v), labels: (v) => Array.isArray(v) && v.every(isString),
+    author: isNullableString, authorRole: oneOf('owner', 'member', 'other'), createdAt: isString, revisedAt: isString, trusted: (v) => typeof v === 'boolean', trust: isString,
+    closingPrs: listOf(`${kind}.closingPrs`, (k, pr) => check(k, pr, { number: Number.isInteger, state: oneOf('open', 'merged', 'closed'), editedAfterMerge: (v) => typeof v === 'boolean' })),
+    'comments?': listOf(`${kind}.comments`, (k, c) => check(k, c, { id: isString, author: isNullableString, authorRole: oneOf('owner', 'member', 'other'), body: isString, createdAt: isString, url: isNullableString })),
+  }),
+  issueComment: (kind, value) => check(kind, value, { issue: Number.isInteger, url: isNullableString }),
+  issueClose: (kind, value) => check(kind, value, { issue: Number.isInteger, state: oneOf('closed'), changed: (v) => typeof v === 'boolean' }),
   checks: (kind, value) => check(kind, value, {
     sha: isString, state: oneOf('none', 'pending', 'success', 'failure'),
     runs: listOf(`${kind}.runs`, (k, run) => check(k, run, { name: isString, state: isString, url: isNullableString })),
@@ -51,7 +61,7 @@ const SHAPES = {
   event: (kind, value) => check(kind, value, { id: (v) => isString(v) || Number.isInteger(v), event: oneOf('labeled', 'unlabeled'), label: isString, createdAt: isString }),
 };
 
-/** Throws unless `value` has the contract's shape for `kind` (pr, checks, thread, note, claim, factor, comment, merge, files, event). */
+/** Throws unless `value` has the contract's shape for `kind` (pr, issue, issueComment, issueClose, checks, thread, note, claim, factor, comment, merge, files, event). */
 export function assertShape(kind, value) {
   const shape = SHAPES[kind];
   if (!shape) throw new Error(`no contract shape named ${kind}`);

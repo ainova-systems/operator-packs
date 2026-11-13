@@ -24,8 +24,16 @@
 //                                    carries its inline comments' bodies, as discovery reads them
 //   merge <n> --method squash|merge|rebase   { pr, state, mergeCommit }
 //
+//   issue list                    [issue]    open issues carrying the queue label (operator_config `issues`)
+//   issue view <n>                issue      with its comments, and every pull request that closes it
+//   issue comment <n> --body-file <f>   { issue, url }
+//   issue close <n> --reason completed|not_planned --body-file <f>   { issue, state, changed }
+//
 //   pr = { number, url, title, body, draft, state: open|merged|closed, head: { ref, sha },
-//          base: { ref }, mergeable: clean|conflicting|unknown, labels, milestone, createdAt, author }
+//          base: { ref }, mergeable: clean|conflicting|unknown, labels, milestone, createdAt, author,
+//          closes: [issue number] }
+//   issue = { number, url, title, body, state: open|closed, stateReason, labels, author, authorRole,
+//             createdAt, trusted, trust, closingPrs: [{ number, state }], comments? }
 //
 // Extensions the operator skills and discovery need beyond the core contract, part of it here:
 //   pr edit <n> [--claim [--takeover]] [--milestone <title>] [--title <t>] [--body-file <f>]
@@ -41,8 +49,8 @@
 //   events <n>                    [{ id, event: labeled|unlabeled, label, createdAt }]
 //
 // Configuration: OPERATOR_CONFIG names the operator configuration file (profile `operator_config`);
-// it supplies the processing label, the deciding CI workflows (`ciWorkflows`) and the author
-// associations allowed to speak for the project (`allowedAuthors`); references/operator-config.md
+// it supplies the processing label, the deciding CI workflows (`ciWorkflows`), the author
+// associations allowed to speak for the project (`allowedAuthors`) and the issue queue (`issues`); references/operator-config.md
 // is its schema, and a file missing a required key is refused (exit 2). A platform's implementation
 // is named `forge-<platform>`, so a tool watching for claims can recognize it by name.
 //
@@ -84,6 +92,7 @@ export function checkOperatorConfig(config, source = 'operator configuration') {
   }
   if ((config.clarifySlots ?? []).length > 0 && !config.milestones.clarification) missing('milestones.clarification');
   for (const key of ['allowedAuthors', 'slots']) if (!Array.isArray(config[key]) || config[key].length === 0) missing(key);
+  if (config.issues !== undefined) for (const key of ['label', 'source']) if (typeof config.issues?.[key] !== 'string' || config.issues[key] === '') missing(`issues.${key}`);
   return config;
 }
 
@@ -121,6 +130,94 @@ export function gh(args, { exec = execFileSync, wait = pause, attempts = 3 } = {
 const PR_FIELDS = 'number,url,title,body,isDraft,state,headRefName,headRefOid,baseRefName,mergeable,labels,milestone,createdAt,author';
 const MERGEABLE = { MERGEABLE: 'clean', CONFLICTING: 'conflicting' };
 
+// The columns a line is indented by, a tab reaching the next multiple of four.
+const indentOf = (line) => {
+  let width = 0;
+  for (const char of line) {
+    if (char === ' ') width += 1;
+    else if (char === '\t') width += 4 - (width % 4);
+    else break;
+  }
+  return width;
+};
+// A list item: its marker, the spaces after it, which set where the item's content starts, and that content.
+const LIST_ITEM = /^[ \t]*([-*+]|\d{1,9}[.)])([ \t]+|$)(.*)$/;
+// A fence opener; a backtick fence's info string holds no backtick, so `x` on its own line is a code span.
+const FENCE = /^(`{3,}(?=[^`]*$)|~{3,})/;
+
+/**
+ * A Markdown body without its fenced and indented code, code spans and HTML comments: the platform reads
+ * no reference in them. Code inside a list item is indented relative to the item's content, so open list
+ * items are kept as a stack of content columns. An approximation of the platform's parser, with no
+ * dependency.
+ */
+function proseOf(body) {
+  const prose = [];
+  const items = [];
+  let fence = null;
+  let codeAt = null;
+  let afterBlank = true;
+  for (const line of String(body ?? '').replace(/\r\n?/g, '\n').replace(/<!--[\s\S]*?(?:-->|$)/g, ' ').split('\n')) {
+    const blank = line.trim() === '';
+    const width = indentOf(line);
+    if (fence) {
+      const close = /^(`+|~+)[ \t]*$/.exec(line.trimStart())?.[1];
+      if (close && width < fence.at + 4 && close[0] === fence.marker[0] && close.length >= fence.marker.length) fence = null;
+      continue;
+    }
+    if (codeAt !== null && (blank || width >= codeAt + 4)) continue;
+    codeAt = null;
+    const item = width < (items.at(-1) ?? 0) + 4 ? LIST_ITEM.exec(line) : null;
+    // A line belongs to the innermost open item whose content it reaches; an item closes the ones it is not inside.
+    if (item || (!blank && afterBlank)) while (items.length && width < items.at(-1)) items.pop();
+    const base = items.at(-1) ?? 0;
+    if (!blank && !item && afterBlank && width >= base + 4) {
+      codeAt = base;
+      continue;
+    }
+    afterBlank = blank;
+    if (item) {
+      // Five or more spaces after the marker are one space and indented code.
+      const content = width + item[1].length + (item[2].length >= 1 && item[2].length <= 4 ? item[2].length : 1);
+      items.push(content);
+      const open = FENCE.exec(item[3])?.[1];
+      if (open) fence = { marker: open, at: content };
+      else prose.push(item[3]);
+      continue;
+    }
+    const open = width < base + 4 ? FENCE.exec(line.trimStart())?.[1] : null;
+    if (open) fence = { marker: open, at: base };
+    else prose.push(line);
+  }
+  // A code span closes on a backtick run of the same length, within its paragraph.
+  return prose.join('\n').replace(/(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g, ' ');
+}
+
+/** `host/owner/name` of the repository a platform URL points into, or null. */
+export function repositoryOf(url) {
+  const match = /^https:\/\/([^/]+\/[^/]+\/[^/#?]+)/.exec(String(url ?? ''));
+  return match ? match[1] : null;
+}
+
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+
+/**
+ * The issues of this repository a pull request body closes with a closing keyword (`Closes #12`,
+ * `fixes: #12`, and with `repository` (`host/owner/name`) given, `owner/name#12` or the issue's URL on
+ * that host), outside code. Read from the body itself: the platform links a keyword only when the pull
+ * request targets the default branch, and the pipeline needs the link whatever the base. Another
+ * repository's issues, on any host, are never named.
+ */
+export function closesOf(body, repository = null) {
+  const [host, ...path] = String(repository ?? '').split('/');
+  const name = path.join('/');
+  const own = repository ? `|${escape(name)}#|https?://${escape(host)}/${escape(name)}/issues/` : '';
+  const pattern = new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\\s+(?:#${own})(\\d+)\\b`, 'gi');
+  const numbers = new Set();
+  for (const match of proseOf(body).matchAll(pattern)) numbers.add(Number(match[1]));
+  return [...numbers].sort((a, b) => a - b);
+}
+
 /** A pull request in the contract's shape, from `gh pr view/list --json` fields. */
 export function normalizePr(raw) {
   return {
@@ -137,6 +234,7 @@ export function normalizePr(raw) {
     milestone: raw.milestone?.title ?? null,
     createdAt: raw.createdAt,
     author: raw.author?.login ?? null,
+    closes: closesOf(raw.body, repositoryOf(raw.url)),
   };
 }
 
@@ -329,6 +427,190 @@ export function events(number, run = gh) {
   return readLabelEvents(number, run).map((event) => ({ id: event.id, event: event.event, label: event.label?.name ?? null, createdAt: event.created_at }));
 }
 
+// Issues as a queue source (operator_config `issues`). An issue's text is a task an agent carries out
+// with the right to push, and anyone may open an issue on a public repository, so the queue label alone
+// never makes an issue a task: `trusted` says whether the text comes from someone the project trusts.
+
+const ISSUE_FIELDS = 'number url title body state stateReason createdAt lastEditedAt authorAssociation author{login} labels(first:100){nodes{name}} '
+  + 'closedByPullRequestsReferences(first:25,includeClosedPrs:true){nodes{number state mergedAt lastEditedAt}} '
+  + 'timelineItems(last:100,itemTypes:[LABELED_EVENT,RENAMED_TITLE_EVENT]){nodes{__typename ... on LabeledEvent{createdAt label{name} actor{login}} ... on RenamedTitleEvent{createdAt}}} '
+  + 'comments(last:100){nodes{authorAssociation createdAt lastEditedAt body}}';
+const ISSUES_QUERY = `query($owner:String!,$name:String!,$label:String!,$endCursor:String){repository(owner:$owner,name:$name){issues(first:50,after:$endCursor,states:OPEN,labels:[$label],orderBy:{field:CREATED_AT,direction:ASC}){nodes{${ISSUE_FIELDS}} pageInfo{hasNextPage endCursor}}}}`;
+const ISSUE_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){${ISSUE_FIELDS}}}}`;
+
+// Roles that can label issues, so a label they apply is theirs and not an issue template's.
+const LABELLING_ROLES = new Set(['triage', 'write', 'maintain', 'admin']);
+// The only associations an account holding a role in the repository can have.
+const ASSOCIATED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
+/** An account's role on this repository (`none` for a stranger to a private one). */
+export function readRole(login, run = gh) {
+  try {
+    const [role, permission] = run(['api', `repos/{owner}/{repo}/collaborators/${login}/permission`, '--jq', '.role_name + " " + .permission']).trim().split(' ');
+    return LABELLING_ROLES.has(role) ? role : permission === 'admin' || permission === 'write' ? permission : role || 'none';
+  } catch (error) {
+    if (/HTTP 404/.test(String(error.stderr ?? error.message))) return 'none';
+    throw error;
+  }
+}
+
+/**
+ * Whether an issue's text comes from someone the project trusts: its author speaks for the project
+ * (`allowedAuthors`), or someone who can label issues applied the queue label - an issue template can
+ * apply a label for its author - and neither the text nor the title changed after they did.
+ */
+export function issueTrust(raw, roleOf, config = operatorConfig()) {
+  const author = raw.author?.login ?? 'an unknown account';
+  if (config.allowedAuthors.includes(raw.authorAssociation)) return { trusted: true, trust: `opened by ${author} (${String(raw.authorAssociation).toLowerCase()})` };
+  const label = config.issues?.label;
+  // The platform lists timeline items oldest first, so the last application in the list is the latest.
+  const timeline = raw.timelineItems?.nodes ?? [];
+  const index = timeline.findLastIndex((item) => item.__typename === 'LabeledEvent' && label && item.label?.name === label);
+  if (index < 0) return { trusted: false, trust: `opened by ${author}, and nobody who can triage applied the queue label` };
+  const applied = timeline[index];
+  const actor = applied.actor?.login;
+  // An author the platform does not associate with the repository holds no role in it: no lookup needed.
+  const roleless = actor === raw.author?.login && !ASSOCIATED.has(raw.authorAssociation);
+  if (!actor || roleless || !LABELLING_ROLES.has(roleOf(actor))) return { trusted: false, trust: `${label} applied by ${actor ?? 'an unknown account'}, who cannot triage the repository` };
+  // An edit in the same second as the label cannot be ordered against it, so it counts as after it; a
+  // rename is after it when the timeline lists it later, or at the same second or later.
+  const at = Date.parse(applied.createdAt);
+  const renamed = timeline.some((item, position) => item.__typename === 'RenamedTitleEvent' && (position > index || Date.parse(item.createdAt) >= at));
+  if (Date.parse(raw.lastEditedAt ?? '') >= at || renamed) return { trusted: false, trust: `edited after ${actor} applied ${label}: applying it again trusts the new text` };
+  return { trusted: true, trust: `${label} applied by ${actor}` };
+}
+
+/**
+ * Whether someone who can triage ever applied the queue label, or the author speaks for the project: an
+ * issue the pipeline may have taken, so its closing pull requests are searched even once it is untrusted.
+ */
+function approvedOnce(raw, roleOf, config) {
+  if (config.allowedAuthors.includes(raw.authorAssociation)) return true;
+  const roleless = (actor) => actor === raw.author?.login && !ASSOCIATED.has(raw.authorAssociation);
+  return (raw.timelineItems?.nodes ?? []).some((item) => item.__typename === 'LabeledEvent' && item.label?.name === config.issues?.label
+    && item.actor?.login && !roleless(item.actor.login) && LABELLING_ROLES.has(roleOf(item.actor.login)));
+}
+
+/**
+ * When what intake would take from an issue, or its trust, last changed: its creation, the latest text
+ * edit, title rename or queue-label application, and an owner's or member's comment among the latest 100
+ * added or edited, the pipeline's own excepted. Nobody else's comment asks discovery again.
+ */
+function revisedAt(raw, config) {
+  const label = config.issues?.label;
+  const requirements = (raw.comments?.nodes ?? []).filter((item) => authorRole(item.authorAssociation, config) !== 'other' && !String(item.body ?? '').includes('<!-- operator:'));
+  const times = [raw.createdAt, raw.lastEditedAt, ...(raw.timelineItems?.nodes ?? [])
+    .filter((item) => item.__typename === 'RenamedTitleEvent' || (item.__typename === 'LabeledEvent' && item.label?.name === label)).map((item) => item.createdAt),
+    ...requirements.flatMap((item) => [item.createdAt, item.lastEditedAt])];
+  return times.filter(Boolean).reduce((latest, time) => (Date.parse(time) > Date.parse(latest) ? time : latest));
+}
+
+const STATE_REASONS = { COMPLETED: 'completed', NOT_PLANNED: 'not_planned', REOPENED: 'reopened', DUPLICATE: 'duplicate' };
+
+/**
+ * A closing pull request in the contract's shape. Its author may edit the body after the merge, so a
+ * merged one whose body changed at or after its merge is no evidence of what the merge closed.
+ */
+function closingPr(pr) {
+  const state = String(pr.state ?? '').toLowerCase();
+  const editedAfterMerge = state === 'merged' && pr.lastEditedAt != null && !(Date.parse(pr.lastEditedAt) < Date.parse(pr.mergedAt ?? ''));
+  return { number: pr.number, state, editedAfterMerge };
+}
+
+/** An issue in the contract's shape; `closing` adds pull requests the platform did not link. */
+export function normalizeIssue(raw, roleOf, config = operatorConfig(), closing = []) {
+  const prs = new Map();
+  for (const pr of [...(raw.closedByPullRequestsReferences?.nodes ?? []), ...closing]) prs.set(pr.number, closingPr(pr));
+  return {
+    number: raw.number,
+    url: raw.url,
+    title: raw.title,
+    body: raw.body ?? '',
+    state: String(raw.state ?? '').toLowerCase(),
+    stateReason: STATE_REASONS[raw.stateReason] ?? null,
+    labels: (raw.labels?.nodes ?? []).map((label) => label.name),
+    author: raw.author?.login ?? null,
+    authorRole: authorRole(raw.authorAssociation, config),
+    createdAt: raw.createdAt,
+    revisedAt: revisedAt(raw, config),
+    ...issueTrust(raw, roleOf, config),
+    closingPrs: [...prs.values()].sort((a, b) => a.number - b.number),
+  };
+}
+
+/** One role lookup per account per call. */
+function roles(run) {
+  const known = new Map();
+  return (login) => {
+    if (!known.has(login)) known.set(login, readRole(login, run));
+    return known.get(login);
+  };
+}
+
+/** The most pull requests one closing search reads (the platform's search stops there); more fails the read rather than missing one. */
+export const CLOSING_SEARCH_CAP = 1000;
+const CLOSING_SEARCH = 'query($q:String!,$endCursor:String){search(query:$q,type:ISSUE,first:100,after:$endCursor){nodes{... on PullRequest{number state body url mergedAt lastEditedAt}} pageInfo{hasNextPage endCursor}}}';
+
+/**
+ * Every pull request, in any state, whose body closes the issue with a closing keyword. The platform links
+ * one only when it targets the default branch, so a pull request merged into another branch is found here.
+ */
+export function closingPullRequests(number, run = gh) {
+  const found = run(['api', 'graphql', '--paginate', '-F', `q=repo:{owner}/{repo} is:pr ${number} in:body`, '-f', `query=${CLOSING_SEARCH}`, '--jq', '.data.search.nodes[] | @json'])
+    .split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  if (found.length >= CLOSING_SEARCH_CAP) throw new Error(`${CLOSING_SEARCH_CAP} or more pull requests mention #${number}: the ones that close it cannot all be read`);
+  return found.filter((pr) => closesOf(pr.body, repositoryOf(pr.url)).includes(number));
+}
+
+/**
+ * Open issues carrying the queue label, oldest first; none when the project has no issue queue. One the
+ * pipeline can take or may have taken - trusted now, or labelled by someone who can triage at some point -
+ * also has its closing pull requests searched, one search each; an outsider's template label costs none.
+ */
+export function listIssues(run = gh, config = operatorConfig()) {
+  if (!config.issues) return [];
+  const output = run(['api', 'graphql', '--paginate', '-F', 'owner={owner}', '-F', 'name={repo}', '-f', `label=${config.issues.label}`, '-f', `query=${ISSUES_QUERY}`,
+    '--jq', '.data.repository.issues.nodes[] | @json']);
+  const roleOf = roles(run);
+  return output.split('\n').filter(Boolean).map((line) => {
+    const raw = JSON.parse(line);
+    const issue = normalizeIssue(raw, roleOf, config);
+    return issue.trusted || approvedOnce(raw, roleOf, config) ? normalizeIssue(raw, roleOf, config, closingPullRequests(raw.number, run)) : issue;
+  });
+}
+
+/** One issue with every comment and every pull request that closes it, on any base. */
+export function viewIssue(number, run = gh, config = operatorConfig()) {
+  const raw = JSON.parse(run(['api', 'graphql', '-F', 'owner={owner}', '-F', 'name={repo}', '-F', `number=${number}`, '-f', `query=${ISSUE_QUERY}`, '--jq', '.data.repository.issue']));
+  const comments = run(['api', '--paginate', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`,
+    '--jq', '.[] | {id: .node_id, url: .html_url, body, createdAt: .created_at, association: .author_association, author: .user.login} | @json'])
+    .split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  return {
+    ...normalizeIssue(raw, roles(run), config, closingPullRequests(number, run)),
+    comments: comments.map((item) => ({
+      id: item.id, author: item.author ?? null, authorRole: authorRole(item.association, config), body: item.body ?? '', createdAt: item.createdAt, url: item.url ?? null,
+    })),
+  };
+}
+
+export function commentIssue(number, bodyFile, run = gh) {
+  if (!bodyFile) throw new UsageError('issue comment needs --body-file');
+  const url = run(['issue', 'comment', String(number), '--body-file', bodyFile]).trim().split('\n').at(-1);
+  return { issue: number, url };
+}
+
+const CLOSE_REASONS = { completed: 'completed', not_planned: 'not planned' };
+
+/** Closes an open issue with one comment saying why; an issue already closed is left as it is. */
+export function closeIssue(number, reason, bodyFile, run = gh) {
+  if (!CLOSE_REASONS[reason]) throw new UsageError(`issue close expects --reason completed or not_planned (got ${reason})`);
+  if (!bodyFile) throw new UsageError('issue close needs --body-file');
+  const state = JSON.parse(run(['issue', 'view', String(number), '--json', 'state'])).state;
+  if (String(state).toUpperCase() === 'CLOSED') return { issue: number, state: 'closed', changed: false };
+  run(['issue', 'close', String(number), '--reason', CLOSE_REASONS[reason], '--comment', readFileSync(bodyFile, 'utf8')]);
+  return { issue: number, state: 'closed', changed: true };
+}
+
 // Discovery readers: GitHub's own shapes, for a discovery implementation.
 
 /**
@@ -338,7 +620,7 @@ export function events(number, run = gh) {
 export const LIST_CONVERSATION_CAP = 100;
 
 export function readPullRequests(run = gh) {
-  const prs = JSON.parse(run(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,isDraft,isCrossRepository,milestone,labels,headRefOid,headRefName,createdAt,body,comments,reviews,mergeable']));
+  const prs = JSON.parse(run(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,url,isDraft,isCrossRepository,milestone,labels,headRefOid,headRefName,createdAt,body,comments,reviews,mergeable']));
   for (const pr of prs) {
     if ((pr.comments ?? []).length < LIST_CONVERSATION_CAP && (pr.reviews ?? []).length < LIST_CONVERSATION_CAP) continue;
     const full = JSON.parse(run(['pr', 'view', String(pr.number), '--json', 'comments,reviews']));
@@ -415,7 +697,7 @@ export function notes(number, run = gh, config = operatorConfig()) {
 }
 
 /** The options that take a value; every other flag is a switch. */
-const VALUE_FLAGS = new Set(['--milestone', '--add-label', '--remove-label', '--base', '--head', '--title', '--body-file', '--resolve', '--body', '--name', '--method', '--to']);
+const VALUE_FLAGS = new Set(['--milestone', '--add-label', '--remove-label', '--base', '--head', '--title', '--body-file', '--resolve', '--body', '--name', '--method', '--to', '--reason']);
 
 /** The flags each subcommand reads; any other flag is a usage error, never silently ignored. */
 export const SUBCOMMAND_FLAGS = {
@@ -426,6 +708,8 @@ export const SUBCOMMAND_FLAGS = {
   factor: ['--name'],
   comment: ['--body-file'],
   merge: ['--method'],
+  'issue comment': ['--body-file'],
+  'issue close': ['--reason', '--body-file'],
 };
 
 /** Every flag of this script: a missing value is never taken for another option. */
@@ -461,18 +745,18 @@ function options(args, name) {
 
 function number(value) {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) throw new UsageError(`a pull request number is required (got ${value})`);
+  if (!Number.isInteger(parsed) || parsed < 1) throw new UsageError(`a pull request or issue number is required (got ${value})`);
   return parsed;
 }
 
-const SUBCOMMANDS = new Set(['pr list', 'pr view', 'pr create', 'pr ready', 'pr draft', 'pr edit', 'pr body', 'pr files', 'checks', 'threads', 'claim', 'factor', 'comment', 'notes', 'merge', 'events']);
+const SUBCOMMANDS = new Set(['pr list', 'pr view', 'pr create', 'pr ready', 'pr draft', 'pr edit', 'pr body', 'pr files', 'checks', 'threads', 'claim', 'factor', 'comment', 'notes', 'merge', 'events', 'issue list', 'issue view', 'issue comment', 'issue close']);
 
-const USAGE = 'usage: forge-github.mjs pr list|view <n>|create ...|ready <n>|draft <n>|edit <n> [--claim] [--milestone <m>] [--title <t>] [--body-file <f>] ...|body <n>|files <n> | checks <sha> | threads <n> [--unresolved] [--resolve <id> --body <text>] | claim take|release <n> | factor set|clear <n> --name <f> | comment <n> --body-file <f> | notes <n> | merge <n> --method <m> | events <n>';
+const USAGE = 'usage: forge-github.mjs pr list|view <n>|create ...|ready <n>|draft <n>|edit <n> [--claim] [--milestone <m>] [--title <t>] [--body-file <f>] ...|body <n>|files <n> | checks <sha> | threads <n> [--unresolved] [--resolve <id> --body <text>] | claim take|release <n> | factor set|clear <n> --name <f> | comment <n> --body-file <f> | notes <n> | merge <n> --method <m> | events <n> | issue list|view <n>|comment <n> --body-file <f>|close <n> --reason completed|not_planned --body-file <f>';
 
 /** Runs one subcommand and returns what it prints: JSON, or plain text for `pr body`. */
 export function execute(args, run = gh) {
   const [command, action, target] = args;
-  const subcommand = command === 'pr' ? `${command} ${action}` : command;
+  const subcommand = command === 'pr' || command === 'issue' ? `${command} ${action}` : command;
   if (SUBCOMMANDS.has(subcommand)) onlyFlags(args, subcommand);
   if (command === 'pr') {
     if (action === 'list') return listPrs(run);
@@ -495,6 +779,12 @@ export function execute(args, run = gh) {
   if (command === 'merge') return merge(number(action), option(args, '--method'), run);
   if (command === 'events') return events(number(action), run);
   if (command === 'notes') return notes(number(action), run);
+  if (command === 'issue') {
+    if (action === 'list') return listIssues(run);
+    if (action === 'view') return viewIssue(number(target), run);
+    if (action === 'comment') return commentIssue(number(target), option(args, '--body-file'), run);
+    if (action === 'close') return closeIssue(number(target), option(args, '--reason'), option(args, '--body-file'), run);
+  }
   throw new UsageError(USAGE);
 }
 

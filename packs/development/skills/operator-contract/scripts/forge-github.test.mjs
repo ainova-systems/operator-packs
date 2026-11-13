@@ -5,9 +5,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  FLAGS, authorRole, gh, isRead, checkOperatorConfig, checks, ciFromRuns, claim, comment, createPr, draftPr, editPr, events, execute, factor, listPrs, merge, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readUnresolvedThreads, readyPr, resolveThread, threads, UsageError, viewPr,
-} from './forge-github.mjs';
+import { authorRole, checkOperatorConfig, checks, ciFromRuns, claim, closeIssue, closesOf, CLOSING_SEARCH_CAP, closingPullRequests, comment, commentIssue, createPr, draftPr, editPr, events, execute, factor, FLAGS, gh, isRead, issueTrust, listIssues, listPrs, merge, normalizeIssue, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readRole, readUnresolvedThreads, readyPr, repositoryOf, resolveThread, threads, UsageError, viewIssue, viewPr } from './forge-github.mjs';
+import { issueCandidates, issueCleanup } from './discovery-contract.mjs';
 import { assertShape } from './forge-contract.mjs';
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'forge-github.mjs');
@@ -59,7 +58,7 @@ function cli(args, { env = process.env, answer = '' } = {}) {
 test('a pull request is normalized to the contract shape', () => {
   assert.deepEqual(normalizePr(RAW), {
     number: 7, url: RAW.url, title: 'T', body: 'B', draft: true, state: 'open', head: { ref: 'feature/slot-a-x', sha: 'abc1234def' }, base: { ref: 'develop' },
-    mergeable: 'conflicting', labels: ['ai:processing'], milestone: 'Development', createdAt: RAW.createdAt, author: 'me',
+    mergeable: 'conflicting', labels: ['ai:processing'], milestone: 'Development', createdAt: RAW.createdAt, author: 'me', closes: [],
   });
   assert.equal(normalizePr({ ...RAW, mergeable: 'UNKNOWN', milestone: null }).mergeable, 'unknown');
   assert.equal(normalizePr({ ...RAW, mergeable: 'MERGEABLE' }).mergeable, 'clean');
@@ -156,7 +155,7 @@ test('the body and the label events read the same fields discovery does', () => 
 
 test('the command line refuses an unknown subcommand and a missing number', () => {
   assert.throws(() => execute(['nope']), /usage: forge-github/);
-  assert.throws(() => execute(['pr', 'view', 'x'], fake().run), /pull request number is required/);
+  assert.throws(() => execute(['pr', 'view', 'x'], fake().run), /number is required/);
   const usage = cli(['nope']);
   // A command line the script cannot act on is a usage error: exit 2, apart from a gh failure (1).
   assert.equal(usage.status, 2);
@@ -458,4 +457,200 @@ test('gh asks a read again after a network fault, and never repeats a write', ()
 test('isRead tells reads from writes', () => {
   for (const args of [['pr', 'list'], ['pr', 'view', '1'], ['run', 'list'], ['api', 'repos/{owner}/{repo}/issues/1/events'], ['api', 'graphql', '-f', 'query=query($id:ID!){node(id:$id){id}}']]) assert.equal(isRead(args), true, args.join(' '));
   for (const args of [['pr', 'edit', '1'], ['pr', 'comment', '1'], ['pr', 'merge', '1'], ['pr', 'ready', '1'], ['api', '-X', 'POST', 'x'], ['api', 'x', '-f', 'a=b'], ['api', 'graphql', '-f', 'query=mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id}}}'], ['api', '--method=POST', 'x'], ['api', '-XPOST', 'x'], ['api', 'graphql', '-f', 'query=# reply\nmutation{x}']]) assert.equal(isRead(args), false, args.join(' '));
+});
+
+// Issues as a queue source.
+const QUEUE = { ...EXAMPLE, issues: { label: 'pipeline:queue', source: 'Issues' } };
+const labelled = (actor, createdAt = '2026-11-13T10:00:00Z') => ({ __typename: 'LabeledEvent', createdAt, label: { name: 'pipeline:queue' }, actor: { login: actor } });
+const ISSUE = {
+  number: 12, url: 'https://github.com/o/r/issues/12', title: 'Export fails', body: 'Steps', state: 'OPEN', stateReason: null, createdAt: '2026-11-13T09:00:00Z',
+  lastEditedAt: null, authorAssociation: 'NONE', author: { login: 'stranger' }, labels: { nodes: [{ name: 'pipeline:queue' }] },
+  closedByPullRequestsReferences: { nodes: [{ number: 30, state: 'MERGED' }] }, timelineItems: { nodes: [labelled('maintainer')] },
+};
+const ROLE = { maintainer: 'maintain', stranger: 'read', triager: 'triage' };
+const roleOf = (login) => ROLE[login] ?? 'none';
+
+test('a pull request body closes the issues a closing keyword names outside code, and no others', () => {
+  assert.deepEqual(closesOf('Closes #12\nfixes: #3, resolved #40 and Fixed #3'), [3, 12, 40]);
+  assert.deepEqual(closesOf('See #5. Enclosed #6. Closes other/repo#7. closes#8'), []);
+  assert.deepEqual(normalizePr({ ...RAW, body: 'Resolves #9' }).closes, [9]);
+  assert.deepEqual(closesOf(undefined), []);
+  // The platform reads no reference in code or an HTML comment: a documented example closes nothing.
+  const documented = ['Write `Closes #12` in the body.', '```', 'Fixes #13', '```', '~~~~md', 'resolves #14', '~~~', 'still code: closes #15', '~~~~', '<!-- Closes #16 -->', 'Closes #17'].join('\n');
+  assert.deepEqual(closesOf(documented), [17]);
+  // An unclosed fence runs to the end of the body.
+  assert.deepEqual(closesOf('Closes #1\n```\nCloses #2'), [1]);
+  // Indented code after a blank line closes nothing; an indented paragraph continuation or list content does.
+  assert.deepEqual(closesOf('    Closes #1\n\n\tCloses #2'), []);
+  assert.deepEqual(closesOf('text\n    Closes #3\n- item\n\n    Closes #4'), [3, 4]);
+  // Code inside a list item is indented from the item's content, nested items included.
+  assert.deepEqual(closesOf('- Example:\n\n      Closes #11\n\n  Closes #12'), [12]);
+  assert.deepEqual(closesOf('1. item\n   - sub\n\n         Closes #13\n\n       Closes #14'), [14]);
+  assert.deepEqual(closesOf('1.  item\n\n    ```\n    Closes #15\n    ```\nCloses #16'), [16]);
+  // A paragraph back in the parent item after a nested one is prose; a fence may open on the marker line.
+  assert.deepEqual(closesOf('1.  Summary\n    - Detail\n\n    Closes #18'), [18]);
+  assert.deepEqual(closesOf('- ```text\n  Closes #19\n  ```\n\nCloses #20\n- Fixes #21'), [20, 21]);
+  // Bodies written in a browser end their lines with CRLF.
+  assert.deepEqual(closesOf('```\r\nexample\r\n```\r\nCloses #17'), [17]);
+  // A backtick run with backticks after it on the line is a code span, not a fence that hides the rest.
+  assert.deepEqual(closesOf('```example```\nCloses #5 ``a`b``'), [5]);
+  // This repository's issues by qualified name or URL, never another repository's.
+  assert.deepEqual(closesOf('Fixes o/r#6, closes https://github.com/o/r/issues/7, fixes other/r#8, closes https://github.com/other/r/issues/9', 'github.com/o/r'), [6, 7]);
+  // The same path on another host is another repository.
+  assert.deepEqual(closesOf('Fixes https://other.example/o/r/issues/12', 'github.com/o/r'), []);
+  assert.deepEqual(closesOf('Fixes o/r#6'), []);
+  assert.deepEqual(normalizePr({ ...RAW, url: 'https://github.com/o/r/pull/1', body: 'Fixes O/R#10' }).closes, [10]);
+  assert.equal(repositoryOf('https://github.com/o/r/pull/1'), 'github.com/o/r');
+  assert.equal(repositoryOf(undefined), null);
+});
+
+test('an issue is trusted only from a trusted author, or labelled by someone who can triage and not edited since', () => {
+  assert.equal(issueTrust({ ...ISSUE, authorAssociation: 'OWNER', author: { login: 'me' } }, roleOf, QUEUE).trusted, true);
+  assert.deepEqual(issueTrust(ISSUE, roleOf, QUEUE), { trusted: true, trust: 'pipeline:queue applied by maintainer' });
+  // An issue template applies the label for its author: the label alone never trusts the text, and an
+  // author the platform does not associate with the repository needs no role lookup to say so.
+  const asked = [];
+  const template = issueTrust({ ...ISSUE, timelineItems: { nodes: [labelled('stranger')] } }, (login) => { asked.push(login); return 'none'; }, QUEUE);
+  assert.equal(template.trusted, false);
+  assert.deepEqual(asked, []);
+  assert.match(issueTrust({ ...ISSUE, timelineItems: { nodes: [] } }, roleOf, QUEUE).trust, /nobody who can triage/);
+  // Text or title changed after the label: applying it again trusts the new text.
+  assert.match(issueTrust({ ...ISSUE, lastEditedAt: '2026-11-13T11:00:00Z' }, roleOf, QUEUE).trust, /edited after maintainer/);
+  const renamed = { ...ISSUE, timelineItems: { nodes: [labelled('maintainer'), { __typename: 'RenamedTitleEvent', createdAt: '2026-11-13T11:00:00Z' }] } };
+  assert.equal(issueTrust(renamed, roleOf, QUEUE).trusted, false);
+  // An edit in the same second as the label cannot be ordered against it, so it is after it; a rename the
+  // timeline lists after the label is after it whatever its time says.
+  assert.equal(issueTrust({ ...ISSUE, lastEditedAt: '2026-11-13T10:00:00Z' }, roleOf, QUEUE).trusted, false);
+  const sameSecond = { ...ISSUE, timelineItems: { nodes: [{ __typename: 'RenamedTitleEvent', createdAt: '2026-11-13T10:00:00Z' }, labelled('maintainer')] } };
+  assert.equal(issueTrust(sameSecond, roleOf, QUEUE).trusted, false);
+  const listedAfter = { ...ISSUE, timelineItems: { nodes: [labelled('maintainer'), { __typename: 'RenamedTitleEvent', createdAt: '2026-11-13T09:59:59Z' }] } };
+  assert.equal(issueTrust(listedAfter, roleOf, QUEUE).trusted, false);
+  const renamedBefore = { ...ISSUE, timelineItems: { nodes: [{ __typename: 'RenamedTitleEvent', createdAt: '2026-11-13T09:30:00Z' }, labelled('maintainer')] } };
+  assert.equal(issueTrust(renamedBefore, roleOf, QUEUE).trusted, true);
+  const relabelled = { ...ISSUE, lastEditedAt: '2026-11-13T11:00:00Z', timelineItems: { nodes: [labelled('maintainer'), labelled('triager', '2026-11-13T12:00:00Z')] } };
+  assert.equal(issueTrust(relabelled, roleOf, QUEUE).trusted, true);
+  // The latest application decides: a stranger re-applying it after a trusted one does not keep the trust.
+  const reapplied = { ...ISSUE, timelineItems: { nodes: [labelled('maintainer'), labelled('stranger', '2026-11-13T12:00:00Z')] } };
+  assert.equal(issueTrust(reapplied, roleOf, QUEUE).trusted, false);
+});
+
+test('an issue is revised by an edit, a rename, the queue label or an owner comment, never by anyone else\'s comment', () => {
+  const comment = (association, createdAt, fields = {}) => ({ authorAssociation: association, createdAt, lastEditedAt: null, body: 'text', ...fields });
+  const revised = (fields) => normalizeIssue({ ...ISSUE, ...fields }, roleOf, QUEUE).revisedAt;
+  assert.equal(revised({}), '2026-11-13T10:00:00Z');
+  assert.equal(revised({ lastEditedAt: '2026-11-13T10:30:00Z' }), '2026-11-13T10:30:00Z');
+  assert.equal(revised({ comments: { nodes: [comment('OWNER', '2026-11-13T11:00:00Z')] } }), '2026-11-13T11:00:00Z');
+  assert.equal(revised({ comments: { nodes: [comment('MEMBER', '2026-11-13T10:10:00Z', { lastEditedAt: '2026-11-13T11:30:00Z' })] } }), '2026-11-13T11:30:00Z');
+  // An outsider's comment and the pipeline's own status line ask nothing again.
+  assert.equal(revised({ comments: { nodes: [comment('NONE', '2026-11-13T12:00:00Z'), comment('OWNER', '2026-11-13T12:30:00Z', { body: 'Taken into the development pipeline as #31.\n<!-- operator:note -->' })] } }), '2026-11-13T10:00:00Z');
+});
+
+test('a role is read once per account, and a stranger to a private repository has none', () => {
+  assert.equal(readRole('a', fake({ 'api repos/{owner}/{repo}/collaborators/a/permission': 'triage read\n' }).run), 'triage');
+  assert.equal(readRole('a', fake({ 'api repos': 'custom write\n' }).run), 'write');
+  assert.equal(readRole('a', fake({ 'api repos': 'read read\n' }).run), 'read');
+  const missing = () => { throw Object.assign(new Error('Command failed'), { stderr: 'gh: Not Found (HTTP 404)' }); };
+  assert.equal(readRole('ghost', missing), 'none');
+  const down = () => { throw Object.assign(new Error('Command failed'), { stderr: 'gh: Server Error (HTTP 500)' }); };
+  assert.throws(() => readRole('a', down), /Command failed/);
+});
+
+// Pull requests whose body names an issue, as the closing search returns them.
+// The closing search: the issue number it looks for, and the pull requests it answers with, one per line.
+const SEARCH = 'api graphql --paginate -F q=';
+const searchedFor = (args) => Number(args.find((arg) => arg.startsWith('q=')).split(' ')[2]);
+const searched = (byIssue) => (args) => (byIssue[searchedFor(args)] ?? []).map((pr) => JSON.stringify(pr)).join('\n');
+
+test('the issue list reads every labelled open issue, and searches the closing pull requests of trusted ones only', () => {
+  const { issues: _none, ...noQueue } = EXAMPLE;
+  const idle = fake();
+  assert.deepEqual(listIssues(idle.run, noQueue), []);
+  assert.equal(idle.calls.length, 0);
+  const open = { ...ISSUE, number: 13, closedByPullRequestsReferences: { nodes: [] } };
+  // Merged by hand into a branch the platform closes no issue from: only the body search finds it.
+  const mergedElsewhere = { ...ISSUE, number: 14, closedByPullRequestsReferences: { nodes: [] } };
+  // Untrusted: a template label, an edit after the label, a stranger re-applying it.
+  const template = { ...ISSUE, number: 15, closedByPullRequestsReferences: { nodes: [] }, timelineItems: { nodes: [labelled('stranger')] } };
+  const edited = { ...ISSUE, number: 16, closedByPullRequestsReferences: { nodes: [] }, lastEditedAt: '2026-11-13T11:00:00Z' };
+  const reapplied = { ...ISSUE, number: 17, closedByPullRequestsReferences: { nodes: [] }, timelineItems: { nodes: [labelled('maintainer'), labelled('outsider', '2026-11-13T12:00:00Z')] } };
+  const raws = [ISSUE, open, mergedElsewhere, template, edited, reapplied];
+  const { run, calls } = fake({
+    [SEARCH]: searched({ 14: [{ number: 41, state: 'MERGED', body: 'Fixes #14', mergedAt: '2026-11-13T09:00:00Z', lastEditedAt: null }, { number: 42, state: 'OPEN', body: 'Mentions #14' }], 16: [{ number: 43, state: 'MERGED', url: 'https://github.com/o/r/pull/43', body: 'Fixes o/r#16', mergedAt: '2026-11-13T12:00:00Z', lastEditedAt: '2026-11-13T11:00:00Z' }], 17: [{ number: 44, state: 'MERGED', body: 'Fixes #17', mergedAt: '2026-11-13T09:00:00Z', lastEditedAt: '2026-11-13T13:00:00Z' }] }),
+    'api graphql --paginate': raws.map((raw) => JSON.stringify(raw)).join('\n'),
+    'api repos/{owner}/{repo}/collaborators/maintainer/permission': 'maintain write\n',
+  });
+  const issues = listIssues(run, QUEUE);
+  for (const issue of issues) assertShape('issue', issue);
+  assert.deepEqual(issues.map((issue) => [issue.number, issue.trusted]), [[12, true], [13, true], [14, true], [15, false], [16, false], [17, false]]);
+  assert.deepEqual(issues.find((issue) => issue.number === 14).closingPrs, [{ number: 41, state: 'merged', editedAfterMerge: false }]);
+  assert.deepEqual(issues.find((issue) => issue.number === 17).closingPrs, [{ number: 44, state: 'merged', editedAfterMerge: true }]);
+  // Only the untrusted, and those a merged pull request closes, stay out; the latter are cleaned up instead,
+  // including one edited after it was taken (16), whose closing pull request is still searched. A pull request
+  // whose body changed after its merge (17) may have gained the reference later: it holds the issue, closes nothing.
+  assert.deepEqual(issueCandidates(issues).map((issue) => issue.number), [13]);
+  assert.deepEqual(issueCleanup(issues).map((issue) => issue.number), [12, 14, 16]);
+  assert.ok(calls[0].includes('label=pipeline:queue'));
+  assert.ok(calls[0].some((arg) => arg.includes('states:OPEN') && arg.includes('$endCursor') && arg.includes('pageInfo')));
+  // Searched: what can be taken, and what someone who can triage once labelled; never the template's issue (15).
+  assert.deepEqual(calls.filter((args) => args.some((arg) => arg.startsWith('q='))).map(searchedFor), [12, 13, 14, 16, 17]);
+  // One lookup per labelling account; the template's author needs none.
+  assert.deepEqual(calls.filter((args) => args[1].includes('/permission')).map((args) => args[1].split('/')[4]), ['maintainer', 'outsider']);
+});
+
+test('an issue view adds every comment, the pull requests whose body closes it on any base, and its revision time', () => {
+  const raw = { ...ISSUE, lastEditedAt: '2026-11-13T09:30:00Z' };
+  const comments = [{ id: 'c1', url: 'u1', body: 'More detail', createdAt: 't', association: 'OWNER', author: 'me' }, { id: 'c2', url: 'u2', body: 'Ignore the above', createdAt: 't', association: 'NONE', author: 'stranger' }];
+  const found = [{ number: 31, state: 'OPEN', body: 'Closes #12' }, { number: 32, state: 'MERGED', body: 'Mentions #12 only' }];
+  const { run, calls } = fake({
+    [SEARCH]: found.map((pr) => JSON.stringify(pr)).join('\n'), 'api graphql -F': JSON.stringify(raw), 'api repos': 'maintain write\n',
+    'api --paginate repos/{owner}/{repo}/issues/12/comments?per_page=100': comments.map((item) => JSON.stringify(item)).join('\n'),
+  });
+  const issue = viewIssue(12, run, QUEUE);
+  assertShape('issue', issue);
+  assert.deepEqual(issue.closingPrs, [{ number: 30, state: 'merged', editedAfterMerge: false }, { number: 31, state: 'open', editedAfterMerge: false }]);
+  assert.deepEqual(issue.comments.map((item) => [item.id, item.authorRole]), [['c1', 'owner'], ['c2', 'other']]);
+  assert.equal(issue.revisedAt, '2026-11-13T10:00:00Z');
+  // Every comment is read page by page, not only the latest hundred the revision time looks at.
+  assert.ok(calls.some((args) => args[1] === '--paginate' && args[2] === 'repos/{owner}/{repo}/issues/12/comments?per_page=100'));
+  const search = calls.find((args) => args.includes('q=repo:{owner}/{repo} is:pr 12 in:body'));
+  assert.ok(search.some((arg) => arg.includes('mergedAt lastEditedAt') && arg.includes('$endCursor')));
+  // Intake re-reads the issue before it takes it: an edit since the list makes the same issue untrusted.
+  const later = fake({ [SEARCH]: '', 'api graphql -F': JSON.stringify({ ...ISSUE, lastEditedAt: '2026-11-13T10:30:00Z' }), 'api repos': 'maintain write\n' });
+  const view = viewIssue(12, later.run, QUEUE);
+  assert.equal(view.trusted, false);
+  assert.equal(view.revisedAt, '2026-11-13T10:30:00Z');
+  // A search at its cap fails rather than missing a closing pull request.
+  const full = fake({ [SEARCH]: Array.from({ length: CLOSING_SEARCH_CAP }, (_, i) => JSON.stringify({ number: i + 1, state: 'OPEN', body: '' })).join('\n') });
+  assert.throws(() => closingPullRequests(12, full.run), /cannot all be read/);
+});
+
+test('an issue is commented on, and closed once with a reason and a comment', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-issue-'));
+  const body = join(dir, 'close.md');
+  writeFileSync(body, 'Closed by the merge of #31.\n<!-- operator:note -->\n');
+  const posted = fake({ 'issue comment 12': 'https://github.com/o/r/issues/12#issuecomment-1\n' });
+  assert.deepEqual(commentIssue(12, body, posted.run), { issue: 12, url: 'https://github.com/o/r/issues/12#issuecomment-1' });
+  assertShape('issueComment', commentIssue(12, body, posted.run));
+  const open = fake({ 'issue view 12': JSON.stringify({ state: 'OPEN' }) });
+  assert.deepEqual(closeIssue(12, 'not_planned', body, open.run), { issue: 12, state: 'closed', changed: true });
+  assert.deepEqual(open.calls.at(-1), ['issue', 'close', '12', '--reason', 'not planned', '--comment', 'Closed by the merge of #31.\n<!-- operator:note -->\n']);
+  // A retry, or GitHub closing it first on a merge into the default branch, leaves it as it is.
+  const closed = fake({ 'issue view 12': JSON.stringify({ state: 'CLOSED' }) });
+  assertShape('issueClose', closeIssue(12, 'completed', body, closed.run));
+  assert.equal(closed.calls.some((args) => args[1] === 'close'), false);
+  assert.throws(() => closeIssue(12, 'wontfix', body, open.run), /--reason completed or not_planned/);
+  assert.throws(() => closeIssue(12, 'completed', undefined, open.run), /--body-file/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('the issue subcommands dispatch, refuse flags they do not read, and an incomplete issues key is refused', () => {
+  const run = fake({ 'issue comment 12': 'https://github.com/o/r/issues/12#issuecomment-1' }).run;
+  assert.deepEqual(execute(['issue', 'list'], run), []);
+  assert.equal(execute(['issue', 'comment', '12', '--body-file', 'b.md'], run).issue, 12);
+  assert.throws(() => execute(['issue', 'comment', '12', '--body-file', 'b.md', '--reason', 'completed'], run), /issue comment does not take --reason/);
+  assert.throws(() => execute(['issue', 'view', 'x'], run), /number is required/);
+  const usage = cli(['issue', 'close', '12', '--reason']);
+  assert.equal(usage.status, 2);
+  assert.throws(() => checkOperatorConfig({ ...EXAMPLE, issues: { label: 'pipeline:queue' } }), /missing required key issues\.source/);
+  assert.equal(checkOperatorConfig(QUEUE), QUEUE);
 });

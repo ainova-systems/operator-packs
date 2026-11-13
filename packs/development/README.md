@@ -29,7 +29,7 @@ queue item in one session instead of phase by phase.
 | Skill | Milestone role (default title) | Leaves when |
 |---|---|---|
 | `operator-contract` | - | the run contract every phase skill loads first |
-| `operator-intake` | the work queue, or a handed-off pull request → `queue` (In Queue) | a queue item has its pull request, or the handed-off one sits in a slot |
+| `operator-intake` | the work queue, a queue issue, or a handed-off pull request → `queue` (In Queue) | a queue item has its pull request, or the handed-off one sits in a slot |
 | `operator-plan` | `queue` (In Queue) | the plan and its verification steps are committed |
 | `operator-implement` | `development` (Development) | a pushed head goes to review; the plan is complete, the head is reviewed and CI is green |
 | `operator-review` | `codeReview` (Code Review) | the runtime's review is posted: findings return it to Development, a clean review of a finished head sends it to Verification (runtime only) |
@@ -96,6 +96,27 @@ sequenceDiagram
     end
 ```
 
+## Issues as a queue source
+
+With `operator_config` `issues` set (`{ "label": "<label>", "source": "<name>" }`), an open issue carrying
+the label is a queue item of that source, in the place profile `flow_queue` gives it and within its
+`quotas` limit. Only a trusted issue is taken: opened by an account in `allowedAuthors`, or labelled by
+someone who can triage the repository and not edited since (`operator-contract` >
+`references/forge-contract.md` > Trust). An issue template that applies the label for its author makes
+nothing a task.
+
+The issue holds the request and its outcome; the pull request holds the work and every question:
+
+| When | On the issue |
+|---|---|
+| intake takes it | one comment naming the pull request, whose body carries `Closes #<n>` and the issue's text as taken |
+| a question waits on the owner | one line pointing at the pull request, where the answer is given |
+| the pull request merges | closed: by the platform on its default branch, otherwise by `operator-merge` |
+| `owner:rejected` | one comment with the reason; the issue stays open and eligible, and the next plan answers the reason |
+| `owner:cancelled` | closed as not planned, with the reason |
+
+To stop an issue from being taken, remove the label or cancel its pull request.
+
 ## Clarification
 
 Queue items waiting on an owner decision are settled by the separate clarification pack
@@ -103,6 +124,7 @@ Queue items waiting on an owner decision are settled by the separate clarificati
 
 ## What the owner does
 
+- **Queues an issue** with the `operator_config` `issues.label` label, when the project has an issue queue.
 - **Hands a pull request to the pipeline** with the `operator_config` `labels.handoff` label: the
   next free slot adopts it ahead of every queue item, plan revises its scope from what it already
   carries, and it follows the regular flow from there.

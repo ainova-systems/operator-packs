@@ -27,9 +27,32 @@ platform cannot serve fails with a named capability gap, never an emulation.
 | `notes <n>` | `[{ id, kind: comment\|review, author, authorRole: owner\|member\|other, state?, body, inline?, createdAt, url }]`, oldest first |
 | `merge <n> --method squash\|merge\|rebase` | `{ pr, state, mergeCommit }` |
 | `events <n>` | `[{ id, event: labeled\|unlabeled, label, createdAt }]` |
+| `issue list` | `[issue]`, the open issues carrying the queue label (`operator_config` `issues`), oldest first; `[]` when the project has no issue queue. The `closingPrs` of an issue that is trusted, or that an account able to triage labelled at some point, include the pull requests whose body closes it on any base; any other issue's only those the platform links |
+| `issue view <n>` | `issue` with every comment, its `closingPrs` including pull requests whose body closes it on any base |
+| `issue comment <n> --body-file <f>` | `{ issue, url }` |
+| `issue close <n> --reason completed\|not_planned --body-file <f>` | `{ issue, state: closed, changed }`; the file is the closing comment, and an issue already closed is left as it is |
 
 `pr` = `{ number, url, title, body, draft, state: open|merged|closed, head: { ref, sha }, base: { ref },
-mergeable: clean|conflicting|unknown, labels, milestone, createdAt, author }`.
+mergeable: clean|conflicting|unknown, labels, milestone, createdAt, author, closes }`; `closes` lists the issue
+numbers the body closes with a closing keyword (`Closes #12`, `Closes owner/name#12` or the issue's URL for
+this repository on its host, never another's) outside code and HTML comments, read from the body because a platform may
+link them only on its default branch.
+
+`issue` = `{ number, url, title, body, state: open|closed, stateReason, labels, author, authorRole, createdAt,
+revisedAt, trusted, trust, closingPrs: [{ number, state: open|merged|closed, editedAfterMerge }], comments? }`;
+`editedAfterMerge` says a merged pull request's body changed at or after its merge, so it is no evidence of
+what the merge closed; `revisedAt` is the
+latest of its creation, text edit, title rename, queue-label application, and an owner's or member's comment
+(among the latest 100, added or edited) that is not the pipeline's own, so nobody else's comment changes it;
+`comments` (`issue view` only) = `[{ id, author, authorRole, body, createdAt, url }]`.
+
+**Trust.** An issue's text is a task an agent carries out with the right to push, and on a public repository
+anyone may open one. `trusted` is true only when its author speaks for the project (`allowedAuthors`), or
+when the queue label's latest application was made by an account that can triage the repository - a label an
+issue template applies is applied for its author - and neither the text nor the title changed after it. An
+edit in the same second as the label counts as after it.
+`trust` says which, or why not; applying the label again trusts an edited text. A skill reads only the
+comments whose `authorRole` is `owner` or `member`.
 
 `--takeover` is the one way past a standing claim, and a skill uses it only where `operator-contract`
 lets a run take over its own earlier claim or a stale one.

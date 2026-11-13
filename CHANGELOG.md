@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-13
+
+A labelled issue can be a queue item: the pipeline takes it, reports on it, and closes it when the work merges.
+
+### Added
+
+- `operator_config` `issues` (`{ "label", "source" }`, unset by default: nothing changes). Set, an open issue carrying the label is a queue item of that source, in the place profile `flow_queue` gives it and within its `quotas` limit. `operator-intake` takes it like any item, and the pull request it opens carries `Closes #<n>` and the issue's text as taken.
+- Only a trusted issue becomes a task: opened by an account in `allowedAuthors`, or labelled by an account that can triage the repository, with neither the text nor the title edited since (an edit in the same second counts as after). An issue template applying the label for its author trusts nothing; applying the label again trusts an edited text. Intake reads the issue again before it takes it and copies exactly the text it validated. Only owner and member comments count as requirements, and an issue's questions are always asked on its pull request: intake never holds an issue for a decision, and its plan goes in the pull request body.
+- The issue gets one line at each step while the work and every question stay on the pull request: taken (naming the pull request), waiting for the owner's answer (pointing at it), rejected (the reason; the issue stays eligible and the next plan answers it), cancelled (closed as not planned). `operator-merge` closes it after the merge when the platform did not, which it does only on its default branch; discovery asks intake to close an open queue issue a merged pull request already closes (`issueCleanup`) instead of taking it again, unless that pull request's body changed after its merge. With `issues` unset no skill writes to an issue.
+- Forge subcommands `issue list`, `issue view <n>`, `issue comment <n> --body-file <f>` and `issue close <n> --reason completed|not_planned --body-file <f>`, the `issue` answer shape with its `trusted` verdict, `revisedAt` and `closingPrs` (pull requests whose body closes it on any base), and a `closes` field on every pull request: the issues of this repository its body closes outside code (`#12`, `owner/name#12` or the issue URL), read from the body because the platform links them only on its default branch. `issueCandidates` and `issueCleanup` (`scripts/discovery-contract.mjs`) are the rules discovery and intake share.
+
+**Updating:**
+
+- Nothing changes while `issues` is unset. To turn the issue queue on: create the label, set `issues` and, if wanted, a `quotas` entry for its source, place the source in the document profile `flow_queue` names, and make the project's discovery count `issueCandidates` and `issueCleanup` of `forge_cli issue list` as reasons to ask intake, keyed by each issue's number and `revisedAt` (`discovery-contract.md` > Queues). The forge token needs read and write access to issues. A project's own forge implementation adds the `issue` subcommands and the `closes` field. Branches started before the update keep the skills they started with.
+
 ## [0.19.0] - 2026-11-13
 
 A finished change can be judged as product before verification, as a success factor.

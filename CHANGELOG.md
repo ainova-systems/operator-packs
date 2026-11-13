@@ -9,18 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.19.0] - 2026-11-13
 
-The solution can be judged as product too: the plan once it is written, the change once its head is finished.
+A finished change can be judged as product before verification, as a success factor.
 
 ### Added
 
-- Profile key `product_review_skill` (default `none`: no stage, nothing changes). Set, the runtime's `product-review` operation runs that skill read-only in another engine, and the new `operator-product-review` skill (the `product-review-verdict` operation) posts its `## Product review (plan|change) - <VERDICT>` report unchanged and routes the pull request (`operator-contract` > Product review).
-- The plan review: `operator-plan` asks for it when it hands a new plan to development. `PROCEED` leaves the pull request there for implementation; `RETURN` sends it back to the queue, where `operator-plan` revises or declines each finding once and hands on without a second plan review.
-- The change review, once per cycle (since the newest verification or outcome report): `operator-review` and `operator-implement` ask for it, with the pull request in `codeReview`, where a finished head would otherwise move to verification. `APPROVE` moves the head on to verification; `RETURN` sends it to development, where `operator-implement` fixes or declines each finding once, and its next finished head moves to verification without a second change review. A stopped chain is asked again through discovery row 11a, like a code review's.
-- The `approved` label role (`operator_config` `labels.approved`, default `ai:approved`) follows the newest change review: added on `APPROVE`, removed on `RETURN`. It is no success factor and no merge condition, and it is written only beside another `ai:*` label.
+- Profile key `product_review_skill` (default `none`: no stage, nothing changes). Set, together with `ai:approved` in `pr_success_factors`, the runtime's `product-review` operation runs that skill read-only in another engine on every finished, code-reviewed head before verification, and the new `operator-product-review` skill (the `product-review-verdict` operation) posts its `## Product review (change) - APPROVE|RETURN` report unchanged (`operator-contract` > Product review).
+- `APPROVE` writes the success factor `ai:approved` and the head goes on to verification. `RETURN` clears it and sends the pull request back by the route the review names: to development for rework, to the queue when the plan itself is wrong, or to the owner as a question that `implement` resumes. Like a code review, the next finished head is reviewed again; owner input given while the review ran goes on with the route as evidence.
+- `operator-review` and `operator-implement` ask for the product review where a finished head would otherwise move to verification, with the pull request waiting in `codeReview`; a stopped chain is asked again through discovery row 11a. Discovery row 8a asks for it for a pull request in Human Review or Merge Queue without a fresh `ai:approved`, so no head merges unjudged. `operator-verify` returns a head without a fresh `ai:approved` to development, and `operator-plan` re-plans a pull request the review sent back to the queue.
+- The `approved` label role (`operator_config` `labels.approved`, default `ai:approved`) names the factor for discovery.
 
 **Updating:**
 
-- Nothing changes while `product_review_skill` is unset. To turn the stage on: set the key, add the `product-review` (with `then: product-review-verdict`) and `product-review-verdict` operations to `operator.yaml` (`operator.example.yaml` shows both), create the `ai:approved` label (or set `labels.approved`), and add `operator-product-review` wherever the project lists the skills that claim a pull request. Branches started before the update never ask for a product review.
+- Nothing changes while `product_review_skill` is unset. To turn the stage on: set the key, add `ai:approved` to `pr_success_factors`, add the `product-review` (with `then: product-review-verdict`) and `product-review-verdict` operations to `operator.yaml` (`operator.example.yaml` shows both), create the `ai:approved` label, add discovery row 8a to the project's discovery, and add `operator-product-review` wherever the project lists the skills that claim a pull request. Branches started before the update carry neither the verdict skill nor the new factor: discovery row 8a still judges their heads before a merge, and the project's runtime manifest decides how their slots run the verdict.
 
 ## [0.18.0] - 2026-11-10
 

@@ -33,7 +33,7 @@ queue item in one session instead of phase by phase.
 | `operator-plan` | `queue` (In Queue) | the plan and its verification steps are committed |
 | `operator-implement` | `development` (Development) | a pushed head goes to review; the plan is complete, the head is reviewed and CI is green |
 | `operator-review` | `codeReview` (Code Review) | the runtime's review is posted: findings return it to Development, a clean review of a finished head sends it to Verification (runtime only) |
-| `operator-product-review` | `development` (a plan) or `codeReview` (a change) | with profile `product_review_skill` set, the runtime's product review is posted: a plan goes on to Development or back to In Queue, a finished change on to Verification or back to Development; `ai:approved` follows the change verdict (runtime only) |
+| `operator-product-review` | `codeReview` (Code Review), or a later milestone discovery found unapproved | with profile `product_review_skill` set, the runtime's product review is posted: `APPROVE` writes `ai:approved` and the head goes on to Verification; `RETURN` sends it back to Development, In Queue or the owner (runtime only) |
 | `operator-verify` | `verification` (Verification) | profile `verify_skill` passed and profile `outcome_skill` wrote `ai:completed` |
 | - (the owner) | `humanReview` (Human Review) | feedback returns it to Verification; `owner:accepted` sends it to merge |
 | `operator-merge` | `mergeQueue` (Merge Queue) | merged |
@@ -71,10 +71,6 @@ sequenceDiagram
         D->>RT: answer (resumes plan)
     end
     C->>GH: plan commit, verification steps, Development
-    opt product_review_skill set
-        RT->>J: product review of the plan, read-only
-        RT->>C: operator-product-review (report; RETURN goes back to plan once)
-    end
 
     loop each round, until the plan is complete, reviewed and green
         RT->>C: operator-implement (flow_implement, commit_skill)
@@ -83,9 +79,9 @@ sequenceDiagram
         RT->>C: operator-review (report, ai:reviewed)
         C->>GH: Development, or Verification after a clean final review
     end
-    opt product_review_skill set, once per cycle
-        RT->>J: product review of the finished change, read-only
-        RT->>C: operator-product-review (report, ai:approved; RETURN goes back to implement once)
+    opt product_review_skill set, each finished head
+        RT->>J: product review of the change, read-only
+        RT->>C: operator-product-review (report, ai:approved; RETURN goes back to implement, plan or the owner)
     end
 
     RT->>C: operator-verify

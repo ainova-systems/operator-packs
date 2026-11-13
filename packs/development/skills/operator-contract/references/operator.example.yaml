@@ -64,9 +64,10 @@ workflows:
       #   retries: 4
       #   retryDelay: 30m
       #   prompt: >-
-      #     Run the <product_review_skill> skill for pull request {subject}, read-only, with the input
-      #     file {input}: its mode is plan or change, its checkout the location under judgement and its
-      #     body the pull request body. Post nothing; the complete report comment goes in "report".
+      #     Run the <product_review_skill> skill on the change of pull request {subject}, read-only,
+      #     with the input file {input}: its checkout (else this slot) is the location under judgement
+      #     and its body (else the live one) the pull request body. Post nothing; the complete report
+      #     comment goes in "report".
       #     Answer only with the JSON your output schema requires.
       #   then: product-review-verdict
       # product-review-verdict: { kind: agent, engine: claude, skill: operator-product-review, model: sonnet, pool: development-slot, timeout: 30m, retries: 2, retryDelay: 30m, args: ['--permission-mode', auto, '--effort', low] }

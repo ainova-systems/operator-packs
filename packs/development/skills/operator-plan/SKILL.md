@@ -11,10 +11,10 @@ Plan captures the intended result before any implementation; it is the `plan` op
 
 | Contract | |
 |---|---|
-| Trigger | A PR in the queue milestone, including a resumed planning question and a plan review's `RETURN` |
+| Trigger | A PR in the queue milestone, including a resumed planning question or a plan the product review sent back |
 | Work | Profile `flow_intake`, capture only (`operator-contract` > Delegated steps); the plan on the queue item, or profile `flow_plan` for feature-sized work; the PR's verification section; profile `commit_skill` (default `git-commit-push`) |
 | Evidence | plan commit SHA, queue item path and PR URL |
-| Next | complete → development milestone, `implement`, or first `product-review` (plan) when profile `product_review_skill` is set; open question → `needs-input`, resume `plan` |
+| Next | complete → development milestone, `implement`; open question → `needs-input`, resume `plan` |
 
 ## Steps
 
@@ -23,15 +23,7 @@ Plan captures the intended result before any implementation; it is the `plan` op
 2. **Claim and check out** the PR branch at its live head, reconciling the slot first
    (`operator-contract` > The slot stays with its pull request). Read the linked queue item, its feature
    documentation and any plan commits; reuse a completed capture on retry. The intake reservation is
-   not a planning commit. When the newest `## Product review (plan)` report is a `RETURN` with no
-   `<!-- operator:plan-review-answered <head> -->` note after it (`operator-contract` > Product
-   review; `input.evidence` names it, with any owner input given during the review), this run is
-   its answer, once: verify
-   each blocker and concern in the repository, then revise the plan (steps 4 and 5) or decline the
-   finding with its reason in the plan's deviations; post one note listing each finding as `revised`
-   or `declined: <reason>`, with `<!-- operator:plan-review-answered <head> -->` (the head after the
-   plan's push) before the note marker; and hand off at step 6 without asking another plan review.
-   A retry that finds that note already posted goes straight to step 6.
+   not a planning commit.
 3. **Capture the outcome.** Run only the capture of profile `flow_intake` against the item and the repository,
    answering from them what they already settle. Capture the business goal, observable acceptance
    criteria and scope exclusions. Address every recorded rejection reason. Validate the proposed
@@ -42,7 +34,9 @@ Plan captures the intended result before any implementation; it is the `plan` op
    description, the queue items and feedback it links, and the owner's comments and answers: audit
    the existing diff against them, capture the acceptance criteria for the whole scope, and plan the
    remaining gaps and adjustments, which implementation continues from the current head. Only what
-   is still genuinely open goes to the owner. With no linked queue item and no feature-sized plan,
+   is still genuinely open goes to the owner. A pull request the product review sent back
+   (`input.evidence`, `operator-product-review`) is planned again the same way, and the revised plan
+   answers each of its findings. With no linked queue item and no feature-sized plan,
    the plan goes in the pull request body under a `## Plan` heading instead of a commit; a rerun
    replaces that section, never appends to it.
 4. **Write the plan** on the queue item: capture, decisions, deviations and testable slices, each
@@ -58,15 +52,11 @@ Plan captures the intended result before any implementation; it is the `plan` op
    profile `commit_skill`; an identical capture already published is reused, never committed empty.
 6. **Hand off.** All in-scope questions settled → re-check live state, then one call moves the PR
    to the development milestone and drops `ai:processing`. Result `done` with the hand-off request
-   (`operator-contract`). When profile `product_review_skill` is set and the newest plan report is
-   not a `RETURN` that an answer note follows (step 2), the result asks for the plan review instead (`operator-contract` > Product review):
-   the slot clean at the head and the live body written beside it, as `operator-implement` step 5
-   leaves them for a review.
+   (`operator-contract`).
 
 ## Run by hand
 
-`/operator-plan <n>`; it ends naming `/operator-implement <n>`, after profile `product_review_skill`
-on the plan when that key is set.
+`/operator-plan <n>`; it ends naming `/operator-implement <n>`.
 
 ## Verify
 
@@ -76,8 +66,7 @@ on the plan when that key is set.
 
 ## Scope / hand-off
 
-- Implementation rounds are `operator-implement`; a feature-sized plan is profile `flow_plan`; the
-  plan review is the runtime's `product-review` job, posted by `operator-product-review`.
+- Implementation rounds are `operator-implement`; a feature-sized plan is profile `flow_plan`.
 
 ## Constraints
 

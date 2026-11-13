@@ -1,6 +1,6 @@
 ---
 name: operator-product-review
-description: "Post a finished runtime product review of one pull request's plan or change as its report, keep ai:approved with the change verdict, then route the PR: a plan on to implementation or back to planning, a change on to verification or back to development. Runs as the runtime's product-review-verdict operation."
+description: "Post a finished runtime product review of one pull request head as its report, write ai:approved when it approves, then send the PR on to verification or back to development, planning or the owner. Runs as the runtime's product-review-verdict operation."
 argument-hint: "(runtime only; by hand run profile product_review_skill instead)"
 ---
 
@@ -12,69 +12,62 @@ run records its verdict without judging again. It is the `product-review-verdict
 
 | Contract | |
 |---|---|
-| Trigger | The runtime's `product-review` job finished; `input.output` is its findings file at `input.head`, `input.mode` is `plan` or `change`, `input.checkout` the PR's slot it judged |
-| Work | post the report unchanged; a change verdict sets or clears the `approved` label |
-| Evidence | the `## Product review (<mode>) - …` comment at `head:` |
-| Next | plan `PROCEED` → development, `implement`; plan `RETURN` → queue, `plan`; change `APPROVE` → verification, or development when a thread or owner input stands; change `RETURN` → development, `implement` |
+| Trigger | The runtime's `product-review` job finished; `input.output` is its findings file at `input.head` |
+| Work | post the report unchanged; `ai:approved` on `APPROVE`, cleared on `RETURN` |
+| Evidence | the `## Product review (change) - …` comment at `head:` |
+| Next | `APPROVE` → verification (from `codeReview`), or where it stands; `RETURN` → development, queue or an owner question, by its route |
 
 ## Steps
 
-1. **Re-check the head.** The PR must be open, in the development milestone for a plan or the
-   `codeReview` milestone for a change, without `owner:onhold` or another run's `ai:processing` (a
-   HELD report, `operator-contract`), and its head must equal `input.head` and the findings file's
-   `head`. Anything else ends `noop`: a moved head is judged when its own phase asks.
+1. **Re-check the head.** The PR must be open, in `codeReview`, `verification`, `humanReview` or
+   `mergeQueue`, without `owner:onhold` or another run's `ai:processing` (a HELD report,
+   `operator-contract`), and its head must equal `input.head` and the findings file's `head`.
+   Anything else ends `noop`: a moved head is judged when its own phase asks.
 2. **Claim the PR in its slot**, which stands on the PR branch at that head once reconciled
    (`operator-contract` > The slot stays with its pull request).
-3. **Record.** The findings file holds `mode`, `verdict` and `report`, the complete comment. A
-   report whose first line is not `## Product review (<input.mode>) - <verdict>`, whose next line
-   does not start `head: <input.head>`, or whose verdict the mode does not allow (`PROCEED` or
-   `RETURN` for a plan, `APPROVE` or `RETURN` for a change) ends `failed`. First read the owner input
-   (profile `operator_discover --owner-input <n>`): the report becomes its cutoff, so what it lists
-   now - input given while the review ran - travels with the hand-off (step 4). Then post `report`
-   unchanged, unless a report for this head and mode already stands in this cycle (a plan's: at
-   this head) - this verdict's own, from an earlier attempt. A change verdict then sets the
-   `approved` label (`operator_config` `labels.approved`, default `ai:approved`), on a retry that
-   posted nothing too: `APPROVE` adds it when another `ai:*` label stays once the claim is
-   dropped, `RETURN` removes it when it stands. A plan verdict writes no label, and no verdict writes
-   a success factor.
-4. **Hand the PR on** in one edit that drops `ai:processing`, and end `done`:
-   - plan `PROCEED`: it stays in development, where `operator-implement` starts;
-   - plan `RETURN`: to the queue milestone, where `operator-plan` answers the report;
-   - change `APPROVE`: to the verification milestone when no review thread is unresolved (profile
-     `forge_cli threads <n> --unresolved`) and step 3 found no owner input: the head is finished and
-     `operator-verify` waits for CI and QA. Otherwise to development, where `operator-implement`
-     handles them and moves the head on without a second change review;
-   - change `RETURN`: to development, where `operator-implement` fixes or declines each finding once.
+3. **Record.** The findings file holds `verdict`, `route`, `owner_question` and `report`, the complete
+   comment. A report whose first line is not `## Product review (change) - <verdict>` (`APPROVE` or
+   `RETURN`), whose next line does not start `head: <input.head>`, or a `RETURN` without a route
+   (`development`, `plan` or `owner`, the last with its question) ends `failed`. First read the owner
+   input (profile `operator_discover --owner-input <n>`): the report becomes its cutoff, so what it
+   lists now - input given while the review ran - goes on with step 4. Then post `report` unchanged,
+   unless the newest product report already is this one, from an earlier attempt of this run. Write
+   the factor (profile `forge_cli factor set|clear <n> --name ai:approved`) on every attempt:
+   `APPROVE` sets it, `RETURN` clears it.
+4. **Route** in one edit that drops `ai:processing`, and end `done` (`needs-input` for the owner):
+   - `APPROVE` from `codeReview`: to the verification milestone with the hand-off request
+     (`operator-contract`) when no review thread is unresolved (profile `forge_cli threads <n>
+     --unresolved`) and step 3 found no owner input; otherwise to development, where
+     `operator-implement` handles them. From a later milestone the pull request stays where it is.
+   - `RETURN` to `development`: to the development milestone, asking `implement`;
+   - `RETURN` to `plan`: to the queue milestone, asking `plan`;
+   - `RETURN` to `owner`: to the development milestone, asking `owner_question` as
+     `operator-contract` > Asking the owner says, its wait resuming `implement`.
 
-   A move to verification, or a plan `PROCEED` with no owner input, ends with the hand-off request
-   (`operator-contract`). Every other route carries `evidence` - the report's URL and each owner
-   input's URL from step 3 - in its own request, because the input already sits behind the report's
-   cutoff where discovery would not pass it: `plan` keyed `plan:<head>:return-<report id>`, or
-   `implement` keyed `implement:<head>:product-<report id>`.
-5. **Remove the body file** (`input.body`) once the report is posted or the run ends `noop`; the slot
-   stays on the PR branch (`operator-contract`).
+   A `RETURN` also removes `ai:completed` when it stands. Its request, and an `APPROVE` that step 3's
+   owner input sends to development, is keyed `<operation>:<head>:product-<report id>` and carries
+   `evidence`: the report's URL and each owner input's URL from step 3, which discovery would not
+   pass on because they sit behind the report's cutoff.
+5. **Remove the body file** (`input.body`, when the input names one) once the report is posted or
+   the run ends `noop`; the slot stays on the PR branch (`operator-contract`).
 
 ## Run by hand
 
-Nothing to post without a runtime review: run profile `product_review_skill` by hand on the plan or
-the change, post its report, and act on a `RETURN` once as `operator-contract` > Product review says.
+Nothing to post without a runtime review: run profile `product_review_skill` by hand on the change,
+post its report, and set or clear `ai:approved` as step 3 does.
 
 ## Verify
 
-- The `## Product review` comment names the head and the mode it judged, once per head, mode and
-  cycle.
-- The `approved` label stands exactly when the newest change report is `APPROVE`, beside another
-  `ai:*` label.
+- The `## Product review (change)` comment names the head it judged, once per review.
+- `ai:approved` stands exactly when the newest product report is an `APPROVE` at the head.
 - The pull request sits where step 4 sends it, with no claim left on it, and owner input given
   during the review went with it as evidence.
 
 ## Scope / hand-off
 
-- Answering a `RETURN` belongs to `operator-plan` (a plan) and `operator-implement` (a change); the
-  judgment itself is profile `product_review_skill`.
+- Rework belongs to `operator-implement`, a revised plan to `operator-plan`; the judgment itself is
+  profile `product_review_skill`.
 
 ## Constraints
 
-- A retry after a partly recorded verdict posts no second report but still sets the label and
-  finishes step 4.
-- No judgment of its own and no fixes here.
+- No judgment of its own and no fixes here. A factor is written only from this verdict.

@@ -66,8 +66,8 @@ of `operator.yaml`. Load the `operator-contract` skill first.
    `retryable: true`.
 7. **Complete or yield.** Re-read owner input, the freshness of every factor profile
    `pr_success_factors` declares, and CI at the same head. New
-   input is triaged first. A missing or stale review returns to `development` through step 4, so
-   implementation requests one. CI pending → release the claim, `noop`. Every criterion passed, every
+   input is triaged first. A missing or stale review, or `ai:approved` when it is declared, returns to
+   `development` through step 4 (its evidence names the factor), so implementation requests that stage. CI pending → release the claim, `noop`. Every criterion passed, every
    declared factor fresh, CI green, no unresolved thread and no owner decision → profile `outcome_skill` writes
    `ai:completed`, then the PR moves to `humanReview`. Result `done`, no next.
 

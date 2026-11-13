@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STALE_CLAIM_CASES, assertStaleClaims, digestExclusions } from './discovery-contract.mjs';
+import { STALE_CLAIM_CASES, assertStaleClaims, digestExclusions, issueCandidates } from './discovery-contract.mjs';
 
 // The rule as discovery-contract.md > Stale claims states it: the record's job is neither queued nor
 // running, whatever its subject, and the label was not applied after the record was written.
@@ -46,4 +46,19 @@ test('operator_config digestExclude must name the same blocks as digest_exclude,
   assert.throws(() => digestExclusions(two, { digestExclude: [a] }), /name different blocks/);
   assert.throws(() => digestExclusions('none', { digestExclude: [a] }), /name different blocks/);
   assert.deepEqual(digestExclusions('none', { digestExclude: [] }), []);
+});
+
+test('a queue issue is a candidate only while trusted and closed by no open or merged pull request', () => {
+  const issue = (number, fields = {}) => ({ number, trusted: true, closingPrs: [], ...fields });
+  const issues = [
+    issue(1),
+    issue(2, { trusted: false }),
+    issue(3, { closingPrs: [{ number: 30, state: 'open' }] }),
+    issue(4, { closingPrs: [{ number: 31, state: 'merged' }] }),
+    // A closed attempt does not hold the issue: a rejection leaves it eligible.
+    issue(5, { closingPrs: [{ number: 32, state: 'closed' }] }),
+    issue(6),
+  ];
+  assert.deepEqual(issueCandidates(issues, [{ number: 33, closes: [6] }]).map((item) => item.number), [1, 5]);
+  assert.deepEqual(issueCandidates([], []), []);
 });

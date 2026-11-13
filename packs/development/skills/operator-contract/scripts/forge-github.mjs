@@ -24,8 +24,16 @@
 //                                    carries its inline comments' bodies, as discovery reads them
 //   merge <n> --method squash|merge|rebase   { pr, state, mergeCommit }
 //
+//   issue list                    [issue]    open issues carrying the queue label (operator_config `issues`)
+//   issue view <n>                issue      with its comments, and every pull request that closes it
+//   issue comment <n> --body-file <f>   { issue, url }
+//   issue close <n> --reason completed|not_planned --body-file <f>   { issue, state, changed }
+//
 //   pr = { number, url, title, body, draft, state: open|merged|closed, head: { ref, sha },
-//          base: { ref }, mergeable: clean|conflicting|unknown, labels, milestone, createdAt, author }
+//          base: { ref }, mergeable: clean|conflicting|unknown, labels, milestone, createdAt, author,
+//          closes: [issue number] }
+//   issue = { number, url, title, body, state: open|closed, stateReason, labels, author, authorRole,
+//             createdAt, trusted, trust, closingPrs: [{ number, state }], comments? }
 //
 // Extensions the operator skills and discovery need beyond the core contract, part of it here:
 //   pr edit <n> [--claim [--takeover]] [--milestone <title>] [--title <t>] [--body-file <f>]
@@ -41,8 +49,8 @@
 //   events <n>                    [{ id, event: labeled|unlabeled, label, createdAt }]
 //
 // Configuration: OPERATOR_CONFIG names the operator configuration file (profile `operator_config`);
-// it supplies the processing label, the deciding CI workflows (`ciWorkflows`) and the author
-// associations allowed to speak for the project (`allowedAuthors`); references/operator-config.md
+// it supplies the processing label, the deciding CI workflows (`ciWorkflows`), the author
+// associations allowed to speak for the project (`allowedAuthors`) and the issue queue (`issues`); references/operator-config.md
 // is its schema, and a file missing a required key is refused (exit 2). A platform's implementation
 // is named `forge-<platform>`, so a tool watching for claims can recognize it by name.
 //
@@ -84,6 +92,7 @@ export function checkOperatorConfig(config, source = 'operator configuration') {
   }
   if ((config.clarifySlots ?? []).length > 0 && !config.milestones.clarification) missing('milestones.clarification');
   for (const key of ['allowedAuthors', 'slots']) if (!Array.isArray(config[key]) || config[key].length === 0) missing(key);
+  if (config.issues !== undefined) for (const key of ['label', 'source']) if (typeof config.issues?.[key] !== 'string' || config.issues[key] === '') missing(`issues.${key}`);
   return config;
 }
 
@@ -121,6 +130,17 @@ export function gh(args, { exec = execFileSync, wait = pause, attempts = 3 } = {
 const PR_FIELDS = 'number,url,title,body,isDraft,state,headRefName,headRefOid,baseRefName,mergeable,labels,milestone,createdAt,author';
 const MERGEABLE = { MERGEABLE: 'clean', CONFLICTING: 'conflicting' };
 
+/**
+ * The issues of this repository a pull request body closes with a closing keyword (`Closes #12`,
+ * `fixes: #12`). Read from the body itself: the platform links a keyword only when the pull request
+ * targets the default branch, and the pipeline needs the link whatever the base.
+ */
+export function closesOf(body) {
+  const numbers = new Set();
+  for (const match of String(body ?? '').matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b/gi)) numbers.add(Number(match[1]));
+  return [...numbers].sort((a, b) => a - b);
+}
+
 /** A pull request in the contract's shape, from `gh pr view/list --json` fields. */
 export function normalizePr(raw) {
   return {
@@ -137,6 +157,7 @@ export function normalizePr(raw) {
     milestone: raw.milestone?.title ?? null,
     createdAt: raw.createdAt,
     author: raw.author?.login ?? null,
+    closes: closesOf(raw.body),
   };
 }
 
@@ -329,6 +350,125 @@ export function events(number, run = gh) {
   return readLabelEvents(number, run).map((event) => ({ id: event.id, event: event.event, label: event.label?.name ?? null, createdAt: event.created_at }));
 }
 
+// Issues as a queue source (operator_config `issues`). An issue's text is a task an agent carries out
+// with the right to push, and anyone may open an issue on a public repository, so the queue label alone
+// never makes an issue a task: `trusted` says whether the text comes from someone the project trusts.
+
+const ISSUE_FIELDS = 'number url title body state stateReason createdAt lastEditedAt authorAssociation author{login} labels(first:100){nodes{name}} '
+  + 'closedByPullRequestsReferences(first:25,includeClosedPrs:true){nodes{number state}} '
+  + 'timelineItems(last:100,itemTypes:[LABELED_EVENT,RENAMED_TITLE_EVENT]){nodes{__typename ... on LabeledEvent{createdAt label{name} actor{login}} ... on RenamedTitleEvent{createdAt}}}';
+const ISSUES_QUERY = `query($owner:String!,$name:String!,$label:String!,$endCursor:String){repository(owner:$owner,name:$name){issues(first:50,after:$endCursor,states:OPEN,labels:[$label],orderBy:{field:CREATED_AT,direction:ASC}){nodes{${ISSUE_FIELDS}} pageInfo{hasNextPage endCursor}}}}`;
+const ISSUE_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){${ISSUE_FIELDS} comments(last:100){nodes{id url body createdAt authorAssociation author{login}}}}}}`;
+
+// Roles that can label issues, so a label they apply is theirs and not an issue template's.
+const LABELLING_ROLES = new Set(['triage', 'write', 'maintain', 'admin']);
+
+/** An account's role on this repository (`none` for a stranger to a private one). */
+export function readRole(login, run = gh) {
+  try {
+    const [role, permission] = run(['api', `repos/{owner}/{repo}/collaborators/${login}/permission`, '--jq', '.role_name + " " + .permission']).trim().split(' ');
+    return LABELLING_ROLES.has(role) ? role : permission === 'admin' || permission === 'write' ? permission : role || 'none';
+  } catch (error) {
+    if (/HTTP 404/.test(String(error.stderr ?? error.message))) return 'none';
+    throw error;
+  }
+}
+
+/**
+ * Whether an issue's text comes from someone the project trusts: its author speaks for the project
+ * (`allowedAuthors`), or someone who can label issues applied the queue label - an issue template can
+ * apply a label for its author - and neither the text nor the title changed after they did.
+ */
+export function issueTrust(raw, roleOf, config = operatorConfig()) {
+  const author = raw.author?.login ?? 'an unknown account';
+  if (config.allowedAuthors.includes(raw.authorAssociation)) return { trusted: true, trust: `opened by ${author} (${String(raw.authorAssociation).toLowerCase()})` };
+  const label = config.issues?.label;
+  const timeline = raw.timelineItems?.nodes ?? [];
+  const applied = timeline.filter((item) => item.__typename === 'LabeledEvent' && label && item.label?.name === label)
+    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)).at(-1);
+  if (!applied) return { trusted: false, trust: `opened by ${author}, and nobody who can triage applied the queue label` };
+  const actor = applied.actor?.login;
+  if (!actor || !LABELLING_ROLES.has(roleOf(actor))) return { trusted: false, trust: `${label} applied by ${actor ?? 'an unknown account'}, who cannot triage the repository` };
+  const at = Date.parse(applied.createdAt);
+  const edited = Date.parse(raw.lastEditedAt ?? '') > at || timeline.some((item) => item.__typename === 'RenamedTitleEvent' && Date.parse(item.createdAt) > at);
+  if (edited) return { trusted: false, trust: `edited after ${actor} applied ${label}: applying it again trusts the new text` };
+  return { trusted: true, trust: `${label} applied by ${actor}` };
+}
+
+const STATE_REASONS = { COMPLETED: 'completed', NOT_PLANNED: 'not_planned', REOPENED: 'reopened', DUPLICATE: 'duplicate' };
+
+/** An issue in the contract's shape; `closing` adds pull requests the platform did not link. */
+export function normalizeIssue(raw, roleOf, config = operatorConfig(), closing = []) {
+  const prs = new Map();
+  for (const pr of [...(raw.closedByPullRequestsReferences?.nodes ?? []), ...closing]) prs.set(pr.number, { number: pr.number, state: String(pr.state ?? '').toLowerCase() });
+  return {
+    number: raw.number,
+    url: raw.url,
+    title: raw.title,
+    body: raw.body ?? '',
+    state: String(raw.state ?? '').toLowerCase(),
+    stateReason: STATE_REASONS[raw.stateReason] ?? null,
+    labels: (raw.labels?.nodes ?? []).map((label) => label.name),
+    author: raw.author?.login ?? null,
+    authorRole: authorRole(raw.authorAssociation, config),
+    createdAt: raw.createdAt,
+    ...issueTrust(raw, roleOf, config),
+    closingPrs: [...prs.values()].sort((a, b) => a.number - b.number),
+  };
+}
+
+/** One role lookup per account per call. */
+function roles(run) {
+  const known = new Map();
+  return (login) => {
+    if (!known.has(login)) known.set(login, readRole(login, run));
+    return known.get(login);
+  };
+}
+
+/** Open issues carrying the queue label, oldest first; none when the project has no issue queue. */
+export function listIssues(run = gh, config = operatorConfig()) {
+  if (!config.issues) return [];
+  const output = run(['api', 'graphql', '--paginate', '-F', 'owner={owner}', '-F', 'name={repo}', '-f', `label=${config.issues.label}`, '-f', `query=${ISSUES_QUERY}`,
+    '--jq', '.data.repository.issues.nodes[] | @json']);
+  const roleOf = roles(run);
+  return output.split('\n').filter(Boolean).map((line) => normalizeIssue(JSON.parse(line), roleOf, config));
+}
+
+/**
+ * One issue with its comments and every pull request that closes it: those the platform links, and
+ * those whose body names it with a closing keyword, which the platform links only on the default branch.
+ */
+export function viewIssue(number, run = gh, config = operatorConfig()) {
+  const raw = JSON.parse(run(['api', 'graphql', '-F', 'owner={owner}', '-F', 'name={repo}', '-F', `number=${number}`, '-f', `query=${ISSUE_QUERY}`, '--jq', '.data.repository.issue']));
+  const found = JSON.parse(run(['pr', 'list', '--state', 'all', '--search', `${number} in:body`, '--limit', '100', '--json', 'number,state,body']));
+  const closing = found.filter((pr) => closesOf(pr.body).includes(number));
+  return {
+    ...normalizeIssue(raw, roles(run), config, closing),
+    comments: (raw.comments?.nodes ?? []).map((item) => ({
+      id: item.id, author: item.author?.login ?? null, authorRole: authorRole(item.authorAssociation, config), body: item.body ?? '', createdAt: item.createdAt, url: item.url ?? null,
+    })),
+  };
+}
+
+export function commentIssue(number, bodyFile, run = gh) {
+  if (!bodyFile) throw new UsageError('issue comment needs --body-file');
+  const url = run(['issue', 'comment', String(number), '--body-file', bodyFile]).trim().split('\n').at(-1);
+  return { issue: number, url };
+}
+
+const CLOSE_REASONS = { completed: 'completed', not_planned: 'not planned' };
+
+/** Closes an open issue with one comment saying why; an issue already closed is left as it is. */
+export function closeIssue(number, reason, bodyFile, run = gh) {
+  if (!CLOSE_REASONS[reason]) throw new UsageError(`issue close expects --reason completed or not_planned (got ${reason})`);
+  if (!bodyFile) throw new UsageError('issue close needs --body-file');
+  const state = JSON.parse(run(['issue', 'view', String(number), '--json', 'state'])).state;
+  if (String(state).toUpperCase() === 'CLOSED') return { issue: number, state: 'closed', changed: false };
+  run(['issue', 'close', String(number), '--reason', CLOSE_REASONS[reason], '--comment', readFileSync(bodyFile, 'utf8')]);
+  return { issue: number, state: 'closed', changed: true };
+}
+
 // Discovery readers: GitHub's own shapes, for a discovery implementation.
 
 /**
@@ -415,7 +555,7 @@ export function notes(number, run = gh, config = operatorConfig()) {
 }
 
 /** The options that take a value; every other flag is a switch. */
-const VALUE_FLAGS = new Set(['--milestone', '--add-label', '--remove-label', '--base', '--head', '--title', '--body-file', '--resolve', '--body', '--name', '--method', '--to']);
+const VALUE_FLAGS = new Set(['--milestone', '--add-label', '--remove-label', '--base', '--head', '--title', '--body-file', '--resolve', '--body', '--name', '--method', '--to', '--reason']);
 
 /** The flags each subcommand reads; any other flag is a usage error, never silently ignored. */
 export const SUBCOMMAND_FLAGS = {
@@ -426,6 +566,8 @@ export const SUBCOMMAND_FLAGS = {
   factor: ['--name'],
   comment: ['--body-file'],
   merge: ['--method'],
+  'issue comment': ['--body-file'],
+  'issue close': ['--reason', '--body-file'],
 };
 
 /** Every flag of this script: a missing value is never taken for another option. */
@@ -461,18 +603,18 @@ function options(args, name) {
 
 function number(value) {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) throw new UsageError(`a pull request number is required (got ${value})`);
+  if (!Number.isInteger(parsed) || parsed < 1) throw new UsageError(`a pull request or issue number is required (got ${value})`);
   return parsed;
 }
 
-const SUBCOMMANDS = new Set(['pr list', 'pr view', 'pr create', 'pr ready', 'pr draft', 'pr edit', 'pr body', 'pr files', 'checks', 'threads', 'claim', 'factor', 'comment', 'notes', 'merge', 'events']);
+const SUBCOMMANDS = new Set(['pr list', 'pr view', 'pr create', 'pr ready', 'pr draft', 'pr edit', 'pr body', 'pr files', 'checks', 'threads', 'claim', 'factor', 'comment', 'notes', 'merge', 'events', 'issue list', 'issue view', 'issue comment', 'issue close']);
 
-const USAGE = 'usage: forge-github.mjs pr list|view <n>|create ...|ready <n>|draft <n>|edit <n> [--claim] [--milestone <m>] [--title <t>] [--body-file <f>] ...|body <n>|files <n> | checks <sha> | threads <n> [--unresolved] [--resolve <id> --body <text>] | claim take|release <n> | factor set|clear <n> --name <f> | comment <n> --body-file <f> | notes <n> | merge <n> --method <m> | events <n>';
+const USAGE = 'usage: forge-github.mjs pr list|view <n>|create ...|ready <n>|draft <n>|edit <n> [--claim] [--milestone <m>] [--title <t>] [--body-file <f>] ...|body <n>|files <n> | checks <sha> | threads <n> [--unresolved] [--resolve <id> --body <text>] | claim take|release <n> | factor set|clear <n> --name <f> | comment <n> --body-file <f> | notes <n> | merge <n> --method <m> | events <n> | issue list|view <n>|comment <n> --body-file <f>|close <n> --reason completed|not_planned --body-file <f>';
 
 /** Runs one subcommand and returns what it prints: JSON, or plain text for `pr body`. */
 export function execute(args, run = gh) {
   const [command, action, target] = args;
-  const subcommand = command === 'pr' ? `${command} ${action}` : command;
+  const subcommand = command === 'pr' || command === 'issue' ? `${command} ${action}` : command;
   if (SUBCOMMANDS.has(subcommand)) onlyFlags(args, subcommand);
   if (command === 'pr') {
     if (action === 'list') return listPrs(run);
@@ -495,6 +637,12 @@ export function execute(args, run = gh) {
   if (command === 'merge') return merge(number(action), option(args, '--method'), run);
   if (command === 'events') return events(number(action), run);
   if (command === 'notes') return notes(number(action), run);
+  if (command === 'issue') {
+    if (action === 'list') return listIssues(run);
+    if (action === 'view') return viewIssue(number(target), run);
+    if (action === 'comment') return commentIssue(number(target), option(args, '--body-file'), run);
+    if (action === 'close') return closeIssue(number(target), option(args, '--reason'), option(args, '--body-file'), run);
+  }
   throw new UsageError(USAGE);
 }
 

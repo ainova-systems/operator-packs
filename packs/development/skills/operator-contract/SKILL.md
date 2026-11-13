@@ -208,7 +208,9 @@ the label that stands.
 
 1. Post one PR comment: the exact question, the options, and on its last line
    `<!-- operator:question <run.id>:<n> -->` (`n` counts the run's questions from 1), followed by the
-   note marker.
+   note marker. When the pull request closes issues (`pr.closes`), post one line on each as well,
+   `Waiting for the owner's answer in #<pr>.`, ending with the note marker: whoever follows the issue
+   learns where the work waits, and the answer is still given on the pull request.
 2. In one edit drop `ai:processing` and add the `question` label (`operator_config` `labels`,
    default `owner:question`), so the owner sees at a glance which pull requests wait on them; then
    end `needs-input` with
@@ -236,7 +238,7 @@ input starts the phase operation again.
 - Stage reports keep the envelope `references/pr-state.md` states (`## <Stage> - <VERDICT>`, then `head: <sha>`).
 - Comments CI posts carry the project's markers (`operator_config` `pipelineMarkers`).
 - Every other comment a skill posts ends with `<!-- operator:note -->`, a reply in a review thread
-  included: its review has no body of its own, so discovery reads the thread comment. A passing
+  or a comment on an issue included: its review has no body of its own, so discovery reads the thread comment. A passing
   verification's note also carries `<!-- operator:verified <digest> -->` (`operator-verify`), and a
   passing review's `<!-- operator:reviewed <digest> -->` (`operator-review`). An adoption's note carries
   `<!-- operator:slot <slot> -->` (*The slot stays with its pull request*).

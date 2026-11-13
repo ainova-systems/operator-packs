@@ -2,11 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SHAPE_KINDS, assertShape } from './forge-contract.mjs';
 
-const PR = { number: 7, url: 'u', title: 't', body: '', draft: false, state: 'open', head: { ref: 'b', sha: 'abc' }, base: { ref: 'main' }, mergeable: 'clean', labels: [], milestone: null, createdAt: 'x', author: 'a' };
+const PR = { number: 7, url: 'u', title: 't', body: '', draft: false, state: 'open', head: { ref: 'b', sha: 'abc' }, base: { ref: 'main' }, mergeable: 'clean', labels: [], milestone: null, createdAt: 'x', author: 'a', closes: [12] };
+const ISSUE = { number: 12, url: 'u', title: 't', body: '', state: 'open', stateReason: null, labels: ['queue'], author: 'a', authorRole: 'other', createdAt: 'x', trusted: false, trust: 'why', closingPrs: [{ number: 7, state: 'open' }] };
 
 test('every answer shape accepts a conforming answer', () => {
   const samples = {
     pr: PR,
+    issue: { ...ISSUE, comments: [{ id: 'c', author: 'a', authorRole: 'owner', body: 'b', createdAt: 'x', url: null }] },
+    issueComment: { issue: 12, url: 'u' },
+    issueClose: { issue: 12, state: 'closed', changed: false },
     checks: { sha: 'abc', state: 'success', runs: [{ name: 'build', state: 'success', url: 'u' }] },
     thread: { id: 't', resolved: false, path: 'a.js', line: 3, comments: [{ author: 'a', body: 'b', createdAt: 'x' }] },
     note: { id: 'n', kind: 'review', author: 'a', authorRole: 'owner', state: 'commented', body: '', inline: ['x'], createdAt: 'x', url: null },
@@ -27,5 +31,8 @@ test('a field outside the contract fails naming it', () => {
   assert.throws(() => assertShape('checks', { sha: 'a', state: 'green', runs: [] }), /checks\.state/);
   assert.throws(() => assertShape('note', { id: 'n', kind: 'comment', author: 'a', authorRole: 'OWNER', body: '', createdAt: 'x', url: null }), /note\.authorRole/);
   assert.throws(() => assertShape('claim', { pr: 7, claimed: false, held: false }), /claim\.held/);
+  assert.throws(() => assertShape('pr', { ...PR, closes: ['#12'] }), /pr\.closes/);
+  assert.throws(() => assertShape('issue', { ...ISSUE, trusted: 'yes' }), /issue\.trusted/);
+  assert.throws(() => assertShape('issue', { ...ISSUE, closingPrs: [{ number: 7, state: 'MERGED' }] }), /issue\.closingPrs\[0\]\.state/);
   assert.throws(() => assertShape('nope', {}), /no contract shape/);
 });

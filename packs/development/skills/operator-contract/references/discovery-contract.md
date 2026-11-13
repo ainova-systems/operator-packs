@@ -69,7 +69,7 @@ report is a stage report like any other: it moves row 11's key and the owner-inp
 | Subject | When | Request |
 |---|---|---|
 | `queue` | a free delivery slot and an open pull request carrying `labels.handoff`, in any milestone, without `processing`, `onhold`, `cancelled` or `rejected`, whose head is not on a fork and which no job or wait covers | `intake`, `input: { handoff: <n>, head }` for the oldest such pull request by creation, `member` its slot (`operator-contract` > The slot stays with its pull request) when it has one no other pull request holds, else the first free slot; key `handoff:<n>:<head>:<member>:e-<id of the label's latest labeled event>`, so a label the owner applies again asks again. Ahead of every queue item; `quotas` do not count it |
-| `queue` | a free delivery slot (`slots` that no open pipeline PR has as its slot, `operator-contract` > The slot stays with its pull request) and at least one queue item eligible under profile `flow_queue` | `intake`, `member` the first free slot, key `intake:<fingerprint of the candidates, open PRs and quotas>` |
+| `queue` | a free delivery slot (`slots` that no open pipeline PR has as its slot, `operator-contract` > The slot stays with its pull request) and at least one queue item eligible under profile `flow_queue`, or one queue issue (below) | `intake`, `member` the first free slot, key `intake:<fingerprint of the candidates, open PRs and quotas>`; an issue's candidate entry carries its number and when it was last updated |
 | `clarify-queue` | a free clarification slot (`clarifySlots`) and at least one item waiting on an owner decision | `clarify`, step `select`, `candidates`: the top `clarifyCandidates` ranked items, key `clarify-queue:<fingerprint>` |
 
 The label means the hand-over is done: the adoption keeps the branch name and binds the
@@ -79,6 +79,11 @@ are left to the freshness rules (`pr-state.md`). The adopting run removes `label
 that claims it and moves it to `queue`, so from then on it is an ordinary queue pull request, stale
 claim recovery included. It is converted to a draft only when `readyLimit` is set. A cancelled or
 rejected pull request carrying the label takes its close route instead.
+
+With `operator_config` `issues` set, `forge_cli issue list` gives the queue issues, and one is a candidate
+while `issueCandidates` (`scripts/discovery-contract.mjs`) keeps it: trusted, and closed by no open or merged
+pull request, neither one the platform links nor an open one whose `closes` names it. An issue that cannot be
+read fails the discovery run like any other forge read.
 
 Clarification candidates rank by: the queue item field `clarifyFirst: true` first, then the
 `flow_queue` folder order, then the item's priority, then how many items wait on it.

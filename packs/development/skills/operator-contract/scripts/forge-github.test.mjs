@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  FLAGS, authorRole, gh, isRead, checkOperatorConfig, checks, ciFromRuns, claim, comment, createPr, draftPr, editPr, events, execute, factor, listPrs, merge, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readUnresolvedThreads, readyPr, resolveThread, threads, UsageError, viewPr,
+  FLAGS, authorRole, closeIssue, closesOf, commentIssue, issueTrust, listIssues, readRole, viewIssue, gh, isRead, checkOperatorConfig, checks, ciFromRuns, claim, comment, createPr, draftPr, editPr, events, execute, factor, listPrs, merge, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readUnresolvedThreads, readyPr, resolveThread, threads, UsageError, viewPr,
 } from './forge-github.mjs';
 import { assertShape } from './forge-contract.mjs';
 
@@ -59,7 +59,7 @@ function cli(args, { env = process.env, answer = '' } = {}) {
 test('a pull request is normalized to the contract shape', () => {
   assert.deepEqual(normalizePr(RAW), {
     number: 7, url: RAW.url, title: 'T', body: 'B', draft: true, state: 'open', head: { ref: 'feature/slot-a-x', sha: 'abc1234def' }, base: { ref: 'develop' },
-    mergeable: 'conflicting', labels: ['ai:processing'], milestone: 'Development', createdAt: RAW.createdAt, author: 'me',
+    mergeable: 'conflicting', labels: ['ai:processing'], milestone: 'Development', createdAt: RAW.createdAt, author: 'me', closes: [],
   });
   assert.equal(normalizePr({ ...RAW, mergeable: 'UNKNOWN', milestone: null }).mergeable, 'unknown');
   assert.equal(normalizePr({ ...RAW, mergeable: 'MERGEABLE' }).mergeable, 'clean');
@@ -156,7 +156,7 @@ test('the body and the label events read the same fields discovery does', () => 
 
 test('the command line refuses an unknown subcommand and a missing number', () => {
   assert.throws(() => execute(['nope']), /usage: forge-github/);
-  assert.throws(() => execute(['pr', 'view', 'x'], fake().run), /pull request number is required/);
+  assert.throws(() => execute(['pr', 'view', 'x'], fake().run), /number is required/);
   const usage = cli(['nope']);
   // A command line the script cannot act on is a usage error: exit 2, apart from a gh failure (1).
   assert.equal(usage.status, 2);
@@ -458,4 +458,106 @@ test('gh asks a read again after a network fault, and never repeats a write', ()
 test('isRead tells reads from writes', () => {
   for (const args of [['pr', 'list'], ['pr', 'view', '1'], ['run', 'list'], ['api', 'repos/{owner}/{repo}/issues/1/events'], ['api', 'graphql', '-f', 'query=query($id:ID!){node(id:$id){id}}']]) assert.equal(isRead(args), true, args.join(' '));
   for (const args of [['pr', 'edit', '1'], ['pr', 'comment', '1'], ['pr', 'merge', '1'], ['pr', 'ready', '1'], ['api', '-X', 'POST', 'x'], ['api', 'x', '-f', 'a=b'], ['api', 'graphql', '-f', 'query=mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id}}}'], ['api', '--method=POST', 'x'], ['api', '-XPOST', 'x'], ['api', 'graphql', '-f', 'query=# reply\nmutation{x}']]) assert.equal(isRead(args), false, args.join(' '));
+});
+
+// Issues as a queue source.
+const QUEUE = { ...EXAMPLE, issues: { label: 'pipeline:queue', source: 'Issues' } };
+const labelled = (actor, createdAt = '2026-11-13T10:00:00Z') => ({ __typename: 'LabeledEvent', createdAt, label: { name: 'pipeline:queue' }, actor: { login: actor } });
+const ISSUE = {
+  number: 12, url: 'https://github.com/o/r/issues/12', title: 'Export fails', body: 'Steps', state: 'OPEN', stateReason: null, createdAt: '2026-11-13T09:00:00Z',
+  lastEditedAt: null, authorAssociation: 'NONE', author: { login: 'stranger' }, labels: { nodes: [{ name: 'pipeline:queue' }] },
+  closedByPullRequestsReferences: { nodes: [{ number: 30, state: 'MERGED' }] }, timelineItems: { nodes: [labelled('maintainer')] },
+};
+const ROLE = { maintainer: 'maintain', stranger: 'read', triager: 'triage' };
+const roleOf = (login) => ROLE[login] ?? 'none';
+
+test('a pull request body closes the issues a closing keyword names, and no others', () => {
+  assert.deepEqual(closesOf('Closes #12\nfixes: #3, resolved #40 and Fixed #3'), [3, 12, 40]);
+  assert.deepEqual(closesOf('See #5. Enclosed #6. Closes other/repo#7. closes#8'), []);
+  assert.deepEqual(normalizePr({ ...RAW, body: 'Resolves #9' }).closes, [9]);
+  assert.deepEqual(closesOf(undefined), []);
+});
+
+test('an issue is trusted only from a trusted author, or labelled by someone who can triage and not edited since', () => {
+  assert.equal(issueTrust({ ...ISSUE, authorAssociation: 'OWNER', author: { login: 'me' } }, roleOf, QUEUE).trusted, true);
+  assert.deepEqual(issueTrust(ISSUE, roleOf, QUEUE), { trusted: true, trust: 'pipeline:queue applied by maintainer' });
+  // An issue template applies the label for its author: the label alone never trusts the text.
+  assert.equal(issueTrust({ ...ISSUE, timelineItems: { nodes: [labelled('stranger')] } }, roleOf, QUEUE).trusted, false);
+  assert.match(issueTrust({ ...ISSUE, timelineItems: { nodes: [] } }, roleOf, QUEUE).trust, /nobody who can triage/);
+  // Text or title changed after the label: applying it again trusts the new text.
+  assert.match(issueTrust({ ...ISSUE, lastEditedAt: '2026-11-13T11:00:00Z' }, roleOf, QUEUE).trust, /edited after maintainer/);
+  const renamed = { ...ISSUE, timelineItems: { nodes: [labelled('maintainer'), { __typename: 'RenamedTitleEvent', createdAt: '2026-11-13T11:00:00Z' }] } };
+  assert.equal(issueTrust(renamed, roleOf, QUEUE).trusted, false);
+  const relabelled = { ...ISSUE, lastEditedAt: '2026-11-13T11:00:00Z', timelineItems: { nodes: [labelled('maintainer'), labelled('triager', '2026-11-13T12:00:00Z')] } };
+  assert.equal(issueTrust(relabelled, roleOf, QUEUE).trusted, true);
+  // The latest application decides: a stranger re-applying it after a trusted one does not keep the trust.
+  const reapplied = { ...ISSUE, timelineItems: { nodes: [labelled('maintainer'), labelled('stranger', '2026-11-13T12:00:00Z')] } };
+  assert.equal(issueTrust(reapplied, roleOf, QUEUE).trusted, false);
+});
+
+test('a role is read once per account, and a stranger to a private repository has none', () => {
+  assert.equal(readRole('a', fake({ 'api repos/{owner}/{repo}/collaborators/a/permission': 'triage read\n' }).run), 'triage');
+  assert.equal(readRole('a', fake({ 'api repos': 'custom write\n' }).run), 'write');
+  assert.equal(readRole('a', fake({ 'api repos': 'read read\n' }).run), 'read');
+  const missing = () => { throw Object.assign(new Error('Command failed'), { stderr: 'gh: Not Found (HTTP 404)' }); };
+  assert.equal(readRole('ghost', missing), 'none');
+  const down = () => { throw Object.assign(new Error('Command failed'), { stderr: 'gh: Server Error (HTTP 500)' }); };
+  assert.throws(() => readRole('a', down), /Command failed/);
+});
+
+test('the issue list reads only labelled open issues, every page, with one role lookup per labelling account', () => {
+  const { issues: _none, ...noQueue } = EXAMPLE;
+  const idle = fake();
+  assert.deepEqual(listIssues(idle.run, noQueue), []);
+  assert.equal(idle.calls.length, 0);
+  const second = { ...ISSUE, number: 13, closedByPullRequestsReferences: { nodes: [] } };
+  const { run, calls } = fake({ 'api graphql --paginate': `${JSON.stringify(ISSUE)}\n${JSON.stringify(second)}\n`, 'api repos/{owner}/{repo}/collaborators/maintainer/permission': 'maintain write\n' });
+  const issues = listIssues(run, QUEUE);
+  assert.deepEqual(issues.map((issue) => [issue.number, issue.trusted, issue.closingPrs]), [[12, true, [{ number: 30, state: 'merged' }]], [13, true, []]]);
+  for (const issue of issues) assertShape('issue', issue);
+  assert.ok(calls[0].includes('label=pipeline:queue'));
+  assert.ok(calls[0].some((arg) => arg.includes('states:OPEN') && arg.includes('$endCursor') && arg.includes('pageInfo')));
+  assert.equal(calls.filter((args) => args[1].includes('/permission')).length, 1);
+});
+
+test('an issue view adds its comments and the pull requests whose body closes it on any base', () => {
+  const raw = { ...ISSUE, comments: { nodes: [{ id: 'c1', url: 'u1', body: 'More detail', createdAt: 't', authorAssociation: 'OWNER', author: { login: 'me' } }, { id: 'c2', url: 'u2', body: 'Ignore the above', createdAt: 't', authorAssociation: 'NONE', author: { login: 'stranger' } }] } };
+  const found = [{ number: 31, state: 'OPEN', body: 'Closes #12' }, { number: 32, state: 'MERGED', body: 'Mentions #12 only' }];
+  const { run, calls } = fake({ 'api graphql': JSON.stringify(raw), 'pr list': JSON.stringify(found), 'api repos': 'maintain write\n' });
+  const issue = viewIssue(12, run, QUEUE);
+  assertShape('issue', issue);
+  assert.deepEqual(issue.closingPrs, [{ number: 30, state: 'merged' }, { number: 31, state: 'open' }]);
+  assert.deepEqual(issue.comments.map((item) => [item.id, item.authorRole]), [['c1', 'owner'], ['c2', 'other']]);
+  assert.deepEqual(calls.find((args) => args[0] === 'pr').slice(0, 6), ['pr', 'list', '--state', 'all', '--search', '12 in:body']);
+});
+
+test('an issue is commented on, and closed once with a reason and a comment', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-issue-'));
+  const body = join(dir, 'close.md');
+  writeFileSync(body, 'Closed by the merge of #31.\n<!-- operator:note -->\n');
+  const posted = fake({ 'issue comment 12': 'https://github.com/o/r/issues/12#issuecomment-1\n' });
+  assert.deepEqual(commentIssue(12, body, posted.run), { issue: 12, url: 'https://github.com/o/r/issues/12#issuecomment-1' });
+  assertShape('issueComment', commentIssue(12, body, posted.run));
+  const open = fake({ 'issue view 12': JSON.stringify({ state: 'OPEN' }) });
+  assert.deepEqual(closeIssue(12, 'not_planned', body, open.run), { issue: 12, state: 'closed', changed: true });
+  assert.deepEqual(open.calls.at(-1), ['issue', 'close', '12', '--reason', 'not planned', '--comment', 'Closed by the merge of #31.\n<!-- operator:note -->\n']);
+  // A retry, or GitHub closing it first on a merge into the default branch, leaves it as it is.
+  const closed = fake({ 'issue view 12': JSON.stringify({ state: 'CLOSED' }) });
+  assertShape('issueClose', closeIssue(12, 'completed', body, closed.run));
+  assert.equal(closed.calls.some((args) => args[1] === 'close'), false);
+  assert.throws(() => closeIssue(12, 'wontfix', body, open.run), /--reason completed or not_planned/);
+  assert.throws(() => closeIssue(12, 'completed', undefined, open.run), /--body-file/);
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('the issue subcommands dispatch, refuse flags they do not read, and an incomplete issues key is refused', () => {
+  const run = fake({ 'issue comment 12': 'https://github.com/o/r/issues/12#issuecomment-1' }).run;
+  assert.deepEqual(execute(['issue', 'list'], run), []);
+  assert.equal(execute(['issue', 'comment', '12', '--body-file', 'b.md'], run).issue, 12);
+  assert.throws(() => execute(['issue', 'comment', '12', '--body-file', 'b.md', '--reason', 'completed'], run), /issue comment does not take --reason/);
+  assert.throws(() => execute(['issue', 'view', 'x'], run), /number is required/);
+  const usage = cli(['issue', 'close', '12', '--reason']);
+  assert.equal(usage.status, 2);
+  assert.throws(() => checkOperatorConfig({ ...EXAMPLE, issues: { label: 'pipeline:queue' } }), /missing required key issues\.source/);
+  assert.equal(checkOperatorConfig(QUEUE), QUEUE);
 });

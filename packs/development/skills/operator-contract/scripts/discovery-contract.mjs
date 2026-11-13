@@ -73,3 +73,13 @@ export function digestExclusions(profileValue, config = {}) {
   }
   return blocks;
 }
+
+/**
+ * The queue issues a free slot may take (discovery-contract.md > Queues): trusted, and closed by no
+ * open or merged pull request - neither one the platform links (`closingPrs`) nor an open one whose
+ * body names it (`prs[].closes`, the contract's pull request field). Discovery and intake decide alike.
+ */
+export function issueCandidates(issues, prs = []) {
+  const taken = new Set(prs.flatMap((pr) => pr.closes ?? []));
+  return issues.filter((issue) => issue.trusted && !taken.has(issue.number) && !(issue.closingPrs ?? []).some((pr) => pr.state !== 'closed'));
+}

@@ -31,9 +31,10 @@ the `operator-contract` skill first: input, result, claim and markers follow it.
    orders. With `operator_config` `issues` set, the open issues `forge_cli issue list` returns are queue
    items of source `issues.source`, in the place `flow_queue` gives that source (last when it names
    none): only those `issueCandidates` keeps (`operator-contract` > `references/discovery-contract.md` >
-   Queues), never an untrusted one, whatever its label. An open queue issue a merged pull request closes
-   is closed instead (`forge_cli issue close <n> --reason completed`, naming that pull request): a merge
-   outside `operator-merge`, into a branch the platform does not close issues from, left it open.
+   Queues), never an untrusted one, whatever its label. Each open queue issue `issueCleanup` keeps is
+   closed instead, before anything is taken (`forge_cli issue close <n> --reason completed`, comment
+   `Closed by the merge of #<pr>.` with the note marker): a merge outside `operator-merge`, into a branch
+   the platform closes no issue from, left it open.
    When `operator_config` sets `quotas`, count the open pipeline PRs per source from their
    linked queue items (the issues a pull request `closes` count for the issue source) and skip every
    candidate of a source already at its limit. A pull request a clarification slot holds
@@ -54,9 +55,11 @@ the `operator-contract` skill first: input, result, claim and markers follow it.
    whatever count the project's own opening policy reads: QA capacity goes only to drafts
    `operator-verify` admits oldest-first, never to an empty reservation. Link the queue item, take
    verification steps from it (plan refines them), state that implementation has not started, and
-   claim no passing gates. An issue is linked by a line of its own, `Closes #<n>`, and the body carries
-   its title and text as taken, with the comments whose `authorRole` is `owner` or `member`
-   (`forge_cli issue view <n>`): a later edit of the issue changes nothing that was taken, and no other
+   claim no passing gates. Before reserving an issue, read it again (`forge_cli issue view <n>`): it
+   is taken only while that view is open, still carries the queue label and `issueCandidates` keeps
+   it, and otherwise the run skips it and names why. The pull request links it by a line of its own,
+   `Closes #<n>`, and carries exactly that view's title and text, with its comments whose `authorRole`
+   is `owner` or `member`: a later edit of the issue changes nothing that was taken, and no other
    comment is a requirement. Re-read the new PR,
    claim it under the contract, then one edit sets the queue milestone and removes
    `ai:processing`. For an issue, then post one comment on it, `Taken into the development pipeline as
@@ -72,7 +75,8 @@ the `operator-contract` skill first: input, result, claim and markers follow it.
      reason binds the next plan;
    - cancelled: the item leaves the queue the way `flow_queue` says items leave it.
 
-   An issue's record is on the issue itself: rejected, one comment `Attempt #<pr> rejected: <reason>`
+   With `operator_config` `issues` set, the record of an attempt whose queue item is an issue (one
+   its pull request `closes`) is on the issue itself: rejected, one comment `Attempt #<pr> rejected: <reason>`
    ending with `<!-- operator:rejected <pr> -->` and the note marker, the issue staying open and
    eligible; cancelled, `forge_cli issue close <n> --reason not_planned` with the comment `Cancelled
    with #<pr>: <reason>`. A retry finds the comment, or the issue closed, and posts nothing.

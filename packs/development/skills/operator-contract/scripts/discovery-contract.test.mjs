@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STALE_CLAIM_CASES, assertStaleClaims, digestExclusions, issueCandidates } from './discovery-contract.mjs';
+import { STALE_CLAIM_CASES, assertStaleClaims, digestExclusions, issueCandidates, issueCleanup } from './discovery-contract.mjs';
 
 // The rule as discovery-contract.md > Stale claims states it: the record's job is neither queued nor
 // running, whatever its subject, and the label was not applied after the record was written.
@@ -61,4 +61,7 @@ test('a queue issue is a candidate only while trusted and closed by no open or m
   ];
   assert.deepEqual(issueCandidates(issues, [{ number: 33, closes: [6] }]).map((item) => item.number), [1, 5]);
   assert.deepEqual(issueCandidates([], []), []);
+  // An open issue a merged pull request closes is never taken again, but it is cleaned up.
+  assert.deepEqual(issueCleanup(issues.map((item) => ({ state: 'open', ...item }))).map((item) => item.number), [4]);
+  assert.deepEqual(issueCleanup([issue(7, { state: 'closed', closingPrs: [{ number: 34, state: 'merged' }] })]), []);
 });

@@ -46,9 +46,9 @@ Merge applies the owner's acceptance to one verified head; it is the `merge` ope
    with `owner:accepted` as the owner's standing authorization. Record its confirmed merge SHA;
    a command that exited zero is not a confirmation. Profile `merge_skill` deletes the local branch, so the
    slot then returns with profile `sync_base_skill` unscoped; then delete the local
-   `operator/leftover/*` branches the PR's notes name (`operator-contract`). Last, close each issue the
-   pull request `closes` that is still open: the platform closes one only on a merge into its default
-   branch. `forge_cli issue close <n> --reason completed` with the comment `Closed by the merge of
+   `operator/leftover/*` branches the PR's notes name (`operator-contract`). Last, when
+   `operator_config` sets `issues`, close each issue the pull request `closes` that is still open: the
+   platform closes one only on a merge into its default branch. `forge_cli issue close <n> --reason completed` with the comment `Closed by the merge of
    #<pr> (<merge SHA>).` and the note marker; one already closed is left as it is.
 6. **Report a refusal.** Stale evidence or an unmet gate → one comment naming exactly what is stale
    and which stage must refresh it, ending with the note marker, then `noop`. Reuse an identical
@@ -63,7 +63,7 @@ owner's own merge.
 ## Verify
 
 - The pull request reads merged with the merge commit this run recorded, every issue it closes reads
-  closed, and the slot is back on the integration branch; a refusal left exactly one marked comment naming what blocked it.
+  closed when the project has an issue queue, and the slot is back on the integration branch; a refusal left exactly one marked comment naming what blocked it.
 
 ## Scope / hand-off
 

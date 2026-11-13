@@ -32,7 +32,7 @@ const SHAPES = {
   issue: (kind, value) => check(kind, value, {
     number: Number.isInteger, url: isString, title: isString, body: isString, state: oneOf('open', 'closed'),
     stateReason: (v) => v === null || ['completed', 'not_planned', 'reopened', 'duplicate'].includes(v), labels: (v) => Array.isArray(v) && v.every(isString),
-    author: isNullableString, authorRole: oneOf('owner', 'member', 'other'), createdAt: isString, trusted: (v) => typeof v === 'boolean', trust: isString,
+    author: isNullableString, authorRole: oneOf('owner', 'member', 'other'), createdAt: isString, revisedAt: isString, trusted: (v) => typeof v === 'boolean', trust: isString,
     closingPrs: listOf(`${kind}.closingPrs`, (k, pr) => check(k, pr, { number: Number.isInteger, state: oneOf('open', 'merged', 'closed') })),
     'comments?': listOf(`${kind}.comments`, (k, c) => check(k, c, { id: isString, author: isNullableString, authorRole: oneOf('owner', 'member', 'other'), body: isString, createdAt: isString, url: isNullableString })),
   }),

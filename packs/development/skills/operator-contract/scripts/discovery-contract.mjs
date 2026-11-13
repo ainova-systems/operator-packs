@@ -83,3 +83,12 @@ export function issueCandidates(issues, prs = []) {
   const taken = new Set(prs.flatMap((pr) => pr.closes ?? []));
   return issues.filter((issue) => issue.trusted && !taken.has(issue.number) && !(issue.closingPrs ?? []).some((pr) => pr.state !== 'closed'));
 }
+
+/**
+ * Open queue issues a merged pull request closes (discovery-contract.md > Queues): a merge the platform
+ * closes no issue from left them open. None is a candidate; discovery asks intake for them all the same,
+ * and intake closes each one naming that pull request.
+ */
+export function issueCleanup(issues) {
+  return issues.filter((issue) => issue.state === 'open' && (issue.closingPrs ?? []).some((pr) => pr.state === 'merged'));
+}

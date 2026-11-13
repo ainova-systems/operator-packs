@@ -39,9 +39,10 @@ Plan captures the intended result before any implementation; it is the `plan` op
    remaining gaps and adjustments, which implementation continues from the current head. Only what
    is still genuinely open goes to the owner. A pull request the product review sent back
    (`input.evidence`, `operator-product-review`) is planned again the same way, and the revised plan
-   answers each of its findings. With no linked queue item and no feature-sized plan,
-   the plan goes in the pull request body under a `## Plan` heading instead of a commit; a rerun
-   replaces that section, never appends to it.
+   answers each of its findings. With no linked queue item in the repository - none, or an issue,
+   which carries only the pipeline's one-line status comments - and no feature-sized plan, the plan
+   goes in the pull request body under a `## Plan` heading instead of a commit; a rerun replaces that
+   section, never appends to it.
 4. **Write the plan** on the queue item: capture, decisions, deviations and testable slices, each
    naming its files, siblings, skills, integration points and verification. Feature-sized work gets
    its plan from profile `flow_plan`, linked from the item and the PR, never a second plan beside

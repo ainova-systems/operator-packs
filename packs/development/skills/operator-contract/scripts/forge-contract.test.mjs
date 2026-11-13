@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { SHAPE_KINDS, assertShape } from './forge-contract.mjs';
 
 const PR = { number: 7, url: 'u', title: 't', body: '', draft: false, state: 'open', head: { ref: 'b', sha: 'abc' }, base: { ref: 'main' }, mergeable: 'clean', labels: [], milestone: null, createdAt: 'x', author: 'a', closes: [12] };
-const ISSUE = { number: 12, url: 'u', title: 't', body: '', state: 'open', stateReason: null, labels: ['queue'], author: 'a', authorRole: 'other', createdAt: 'x', trusted: false, trust: 'why', closingPrs: [{ number: 7, state: 'open' }] };
+const ISSUE = { number: 12, url: 'u', title: 't', body: '', state: 'open', stateReason: null, labels: ['queue'], author: 'a', authorRole: 'other', createdAt: 'x', revisedAt: 'x', trusted: false, trust: 'why', closingPrs: [{ number: 7, state: 'open' }] };
 
 test('every answer shape accepts a conforming answer', () => {
   const samples = {

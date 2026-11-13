@@ -208,7 +208,8 @@ the label that stands.
 
 1. Post one PR comment: the exact question, the options, and on its last line
    `<!-- operator:question <run.id>:<n> -->` (`n` counts the run's questions from 1), followed by the
-   note marker. When the pull request closes issues (`pr.closes`), post one line on each as well,
+   note marker. When `operator_config` sets `issues` and the pull request closes issues (`pr.closes`),
+   post one line on each as well,
    `Waiting for the owner's answer in #<pr>.`, ending with the note marker: whoever follows the issue
    learns where the work waits, and the answer is still given on the pull request.
 2. In one edit drop `ai:processing` and add the `question` label (`operator_config` `labels`,

@@ -130,14 +130,30 @@ export function gh(args, { exec = execFileSync, wait = pause, attempts = 3 } = {
 const PR_FIELDS = 'number,url,title,body,isDraft,state,headRefName,headRefOid,baseRefName,mergeable,labels,milestone,createdAt,author';
 const MERGEABLE = { MERGEABLE: 'clean', CONFLICTING: 'conflicting' };
 
+/** A Markdown body without its fenced code, code spans and HTML comments: the platform reads no reference in them. */
+function proseOf(body) {
+  const prose = [];
+  let fence = null;
+  for (const line of String(body ?? '').replace(/<!--[\s\S]*?(?:-->|$)/g, ' ').split('\n')) {
+    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fence) {
+      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && marker[2].trim() === '') fence = null;
+      continue;
+    }
+    if (marker) fence = marker[1];
+    else prose.push(line);
+  }
+  return prose.join('\n').replace(/(`+)[\s\S]*?\1/g, ' ');
+}
+
 /**
  * The issues of this repository a pull request body closes with a closing keyword (`Closes #12`,
- * `fixes: #12`). Read from the body itself: the platform links a keyword only when the pull request
- * targets the default branch, and the pipeline needs the link whatever the base.
+ * `fixes: #12`), outside code. Read from the body itself: the platform links a keyword only when the
+ * pull request targets the default branch, and the pipeline needs the link whatever the base.
  */
 export function closesOf(body) {
   const numbers = new Set();
-  for (const match of String(body ?? '').matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b/gi)) numbers.add(Number(match[1]));
+  for (const match of proseOf(body).matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b/gi)) numbers.add(Number(match[1]));
   return [...numbers].sort((a, b) => a - b);
 }
 
@@ -358,10 +374,12 @@ const ISSUE_FIELDS = 'number url title body state stateReason createdAt lastEdit
   + 'closedByPullRequestsReferences(first:25,includeClosedPrs:true){nodes{number state}} '
   + 'timelineItems(last:100,itemTypes:[LABELED_EVENT,RENAMED_TITLE_EVENT]){nodes{__typename ... on LabeledEvent{createdAt label{name} actor{login}} ... on RenamedTitleEvent{createdAt}}}';
 const ISSUES_QUERY = `query($owner:String!,$name:String!,$label:String!,$endCursor:String){repository(owner:$owner,name:$name){issues(first:50,after:$endCursor,states:OPEN,labels:[$label],orderBy:{field:CREATED_AT,direction:ASC}){nodes{${ISSUE_FIELDS}} pageInfo{hasNextPage endCursor}}}}`;
-const ISSUE_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){${ISSUE_FIELDS} comments(last:100){nodes{id url body createdAt authorAssociation author{login}}}}}}`;
+const ISSUE_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){${ISSUE_FIELDS}}}}`;
 
 // Roles that can label issues, so a label they apply is theirs and not an issue template's.
 const LABELLING_ROLES = new Set(['triage', 'write', 'maintain', 'admin']);
+// The only associations an account holding a role in the repository can have.
+const ASSOCIATED = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 
 /** An account's role on this repository (`none` for a stranger to a private one). */
 export function readRole(login, run = gh) {
@@ -383,16 +401,32 @@ export function issueTrust(raw, roleOf, config = operatorConfig()) {
   const author = raw.author?.login ?? 'an unknown account';
   if (config.allowedAuthors.includes(raw.authorAssociation)) return { trusted: true, trust: `opened by ${author} (${String(raw.authorAssociation).toLowerCase()})` };
   const label = config.issues?.label;
+  // The platform lists timeline items oldest first, so the last application in the list is the latest.
   const timeline = raw.timelineItems?.nodes ?? [];
-  const applied = timeline.filter((item) => item.__typename === 'LabeledEvent' && label && item.label?.name === label)
-    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)).at(-1);
-  if (!applied) return { trusted: false, trust: `opened by ${author}, and nobody who can triage applied the queue label` };
+  const index = timeline.findLastIndex((item) => item.__typename === 'LabeledEvent' && label && item.label?.name === label);
+  if (index < 0) return { trusted: false, trust: `opened by ${author}, and nobody who can triage applied the queue label` };
+  const applied = timeline[index];
   const actor = applied.actor?.login;
-  if (!actor || !LABELLING_ROLES.has(roleOf(actor))) return { trusted: false, trust: `${label} applied by ${actor ?? 'an unknown account'}, who cannot triage the repository` };
+  // An author the platform does not associate with the repository holds no role in it: no lookup needed.
+  const roleless = actor === raw.author?.login && !ASSOCIATED.has(raw.authorAssociation);
+  if (!actor || roleless || !LABELLING_ROLES.has(roleOf(actor))) return { trusted: false, trust: `${label} applied by ${actor ?? 'an unknown account'}, who cannot triage the repository` };
+  // An edit in the same second as the label cannot be ordered against it, so it counts as after it; a
+  // rename is after it when the timeline lists it later, or at the same second or later.
   const at = Date.parse(applied.createdAt);
-  const edited = Date.parse(raw.lastEditedAt ?? '') > at || timeline.some((item) => item.__typename === 'RenamedTitleEvent' && Date.parse(item.createdAt) > at);
-  if (edited) return { trusted: false, trust: `edited after ${actor} applied ${label}: applying it again trusts the new text` };
+  const renamed = timeline.some((item, position) => item.__typename === 'RenamedTitleEvent' && (position > index || Date.parse(item.createdAt) >= at));
+  if (Date.parse(raw.lastEditedAt ?? '') >= at || renamed) return { trusted: false, trust: `edited after ${actor} applied ${label}: applying it again trusts the new text` };
   return { trusted: true, trust: `${label} applied by ${actor}` };
+}
+
+/**
+ * When what intake would take from an issue, or its trust, last changed: its creation, the latest text
+ * edit, title rename or queue-label application. A comment changes none of them, so nobody's comment asks
+ * discovery again.
+ */
+function revisedAt(raw, label) {
+  const times = [raw.createdAt, raw.lastEditedAt, ...(raw.timelineItems?.nodes ?? [])
+    .filter((item) => item.__typename === 'RenamedTitleEvent' || (item.__typename === 'LabeledEvent' && item.label?.name === label)).map((item) => item.createdAt)];
+  return times.filter(Boolean).reduce((latest, time) => (Date.parse(time) > Date.parse(latest) ? time : latest));
 }
 
 const STATE_REASONS = { COMPLETED: 'completed', NOT_PLANNED: 'not_planned', REOPENED: 'reopened', DUPLICATE: 'duplicate' };
@@ -412,6 +446,7 @@ export function normalizeIssue(raw, roleOf, config = operatorConfig(), closing =
     author: raw.author?.login ?? null,
     authorRole: authorRole(raw.authorAssociation, config),
     createdAt: raw.createdAt,
+    revisedAt: revisedAt(raw, config.issues?.label),
     ...issueTrust(raw, roleOf, config),
     closingPrs: [...prs.values()].sort((a, b) => a.number - b.number),
   };
@@ -426,27 +461,45 @@ function roles(run) {
   };
 }
 
-/** Open issues carrying the queue label, oldest first; none when the project has no issue queue. */
+/** The most pull requests one closing search reads; more fails the read rather than missing one. */
+export const CLOSING_SEARCH_CAP = 1000;
+
+/**
+ * Every pull request, in any state, whose body closes the issue with a closing keyword. The platform links
+ * one only when it targets the default branch, so a pull request merged into another branch is found here.
+ */
+export function closingPullRequests(number, run = gh) {
+  const found = JSON.parse(run(['pr', 'list', '--state', 'all', '--search', `${number} in:body`, '--limit', String(CLOSING_SEARCH_CAP), '--json', 'number,state,body']));
+  if (found.length >= CLOSING_SEARCH_CAP) throw new Error(`${CLOSING_SEARCH_CAP} or more pull requests mention #${number}: the ones that close it cannot all be read`);
+  return found.filter((pr) => closesOf(pr.body).includes(number)).map((pr) => ({ number: pr.number, state: pr.state }));
+}
+
+/**
+ * Open issues carrying the queue label, oldest first; none when the project has no issue queue. A trusted
+ * one, the only kind that can be taken, also has its closing pull requests searched: one search each.
+ */
 export function listIssues(run = gh, config = operatorConfig()) {
   if (!config.issues) return [];
   const output = run(['api', 'graphql', '--paginate', '-F', 'owner={owner}', '-F', 'name={repo}', '-f', `label=${config.issues.label}`, '-f', `query=${ISSUES_QUERY}`,
     '--jq', '.data.repository.issues.nodes[] | @json']);
   const roleOf = roles(run);
-  return output.split('\n').filter(Boolean).map((line) => normalizeIssue(JSON.parse(line), roleOf, config));
+  return output.split('\n').filter(Boolean).map((line) => {
+    const raw = JSON.parse(line);
+    const issue = normalizeIssue(raw, roleOf, config);
+    return issue.trusted ? normalizeIssue(raw, roleOf, config, closingPullRequests(raw.number, run)) : issue;
+  });
 }
 
-/**
- * One issue with its comments and every pull request that closes it: those the platform links, and
- * those whose body names it with a closing keyword, which the platform links only on the default branch.
- */
+/** One issue with every comment and every pull request that closes it, on any base. */
 export function viewIssue(number, run = gh, config = operatorConfig()) {
   const raw = JSON.parse(run(['api', 'graphql', '-F', 'owner={owner}', '-F', 'name={repo}', '-F', `number=${number}`, '-f', `query=${ISSUE_QUERY}`, '--jq', '.data.repository.issue']));
-  const found = JSON.parse(run(['pr', 'list', '--state', 'all', '--search', `${number} in:body`, '--limit', '100', '--json', 'number,state,body']));
-  const closing = found.filter((pr) => closesOf(pr.body).includes(number));
+  const comments = run(['api', '--paginate', `repos/{owner}/{repo}/issues/${number}/comments?per_page=100`,
+    '--jq', '.[] | {id: .node_id, url: .html_url, body, createdAt: .created_at, association: .author_association, author: .user.login} | @json'])
+    .split('\n').filter(Boolean).map((line) => JSON.parse(line));
   return {
-    ...normalizeIssue(raw, roles(run), config, closing),
-    comments: (raw.comments?.nodes ?? []).map((item) => ({
-      id: item.id, author: item.author?.login ?? null, authorRole: authorRole(item.authorAssociation, config), body: item.body ?? '', createdAt: item.createdAt, url: item.url ?? null,
+    ...normalizeIssue(raw, roles(run), config, closingPullRequests(number, run)),
+    comments: comments.map((item) => ({
+      id: item.id, author: item.author ?? null, authorRole: authorRole(item.association, config), body: item.body ?? '', createdAt: item.createdAt, url: item.url ?? null,
     })),
   };
 }

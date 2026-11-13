@@ -5,9 +5,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  FLAGS, authorRole, closeIssue, closesOf, commentIssue, issueTrust, listIssues, readRole, viewIssue, gh, isRead, checkOperatorConfig, checks, ciFromRuns, claim, comment, createPr, draftPr, editPr, events, execute, factor, listPrs, merge, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readUnresolvedThreads, readyPr, resolveThread, threads, UsageError, viewPr,
-} from './forge-github.mjs';
+import { authorRole, checkOperatorConfig, checks, ciFromRuns, claim, closeIssue, closesOf, CLOSING_SEARCH_CAP, closingPullRequests, comment, commentIssue, createPr, draftPr, editPr, events, execute, factor, FLAGS, gh, isRead, issueTrust, listIssues, listPrs, merge, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readRole, readUnresolvedThreads, readyPr, resolveThread, threads, UsageError, viewIssue, viewPr } from './forge-github.mjs';
+import { issueCandidates, issueCleanup } from './discovery-contract.mjs';
 import { assertShape } from './forge-contract.mjs';
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'forge-github.mjs');
@@ -471,23 +470,41 @@ const ISSUE = {
 const ROLE = { maintainer: 'maintain', stranger: 'read', triager: 'triage' };
 const roleOf = (login) => ROLE[login] ?? 'none';
 
-test('a pull request body closes the issues a closing keyword names, and no others', () => {
+test('a pull request body closes the issues a closing keyword names outside code, and no others', () => {
   assert.deepEqual(closesOf('Closes #12\nfixes: #3, resolved #40 and Fixed #3'), [3, 12, 40]);
   assert.deepEqual(closesOf('See #5. Enclosed #6. Closes other/repo#7. closes#8'), []);
   assert.deepEqual(normalizePr({ ...RAW, body: 'Resolves #9' }).closes, [9]);
   assert.deepEqual(closesOf(undefined), []);
+  // The platform reads no reference in code or an HTML comment: a documented example closes nothing.
+  const documented = ['Write `Closes #12` in the body.', '```', 'Fixes #13', '```', '~~~~md', 'resolves #14', '~~~', 'still code: closes #15', '~~~~', '<!-- Closes #16 -->', 'Closes #17'].join('\n');
+  assert.deepEqual(closesOf(documented), [17]);
+  // An unclosed fence runs to the end of the body.
+  assert.deepEqual(closesOf('Closes #1\n```\nCloses #2'), [1]);
 });
 
 test('an issue is trusted only from a trusted author, or labelled by someone who can triage and not edited since', () => {
   assert.equal(issueTrust({ ...ISSUE, authorAssociation: 'OWNER', author: { login: 'me' } }, roleOf, QUEUE).trusted, true);
   assert.deepEqual(issueTrust(ISSUE, roleOf, QUEUE), { trusted: true, trust: 'pipeline:queue applied by maintainer' });
-  // An issue template applies the label for its author: the label alone never trusts the text.
-  assert.equal(issueTrust({ ...ISSUE, timelineItems: { nodes: [labelled('stranger')] } }, roleOf, QUEUE).trusted, false);
+  // An issue template applies the label for its author: the label alone never trusts the text, and an
+  // author the platform does not associate with the repository needs no role lookup to say so.
+  const asked = [];
+  const template = issueTrust({ ...ISSUE, timelineItems: { nodes: [labelled('stranger')] } }, (login) => { asked.push(login); return 'none'; }, QUEUE);
+  assert.equal(template.trusted, false);
+  assert.deepEqual(asked, []);
   assert.match(issueTrust({ ...ISSUE, timelineItems: { nodes: [] } }, roleOf, QUEUE).trust, /nobody who can triage/);
   // Text or title changed after the label: applying it again trusts the new text.
   assert.match(issueTrust({ ...ISSUE, lastEditedAt: '2026-11-13T11:00:00Z' }, roleOf, QUEUE).trust, /edited after maintainer/);
   const renamed = { ...ISSUE, timelineItems: { nodes: [labelled('maintainer'), { __typename: 'RenamedTitleEvent', createdAt: '2026-11-13T11:00:00Z' }] } };
   assert.equal(issueTrust(renamed, roleOf, QUEUE).trusted, false);
+  // An edit in the same second as the label cannot be ordered against it, so it is after it; a rename the
+  // timeline lists after the label is after it whatever its time says.
+  assert.equal(issueTrust({ ...ISSUE, lastEditedAt: '2026-11-13T10:00:00Z' }, roleOf, QUEUE).trusted, false);
+  const sameSecond = { ...ISSUE, timelineItems: { nodes: [{ __typename: 'RenamedTitleEvent', createdAt: '2026-11-13T10:00:00Z' }, labelled('maintainer')] } };
+  assert.equal(issueTrust(sameSecond, roleOf, QUEUE).trusted, false);
+  const listedAfter = { ...ISSUE, timelineItems: { nodes: [labelled('maintainer'), { __typename: 'RenamedTitleEvent', createdAt: '2026-11-13T09:59:59Z' }] } };
+  assert.equal(issueTrust(listedAfter, roleOf, QUEUE).trusted, false);
+  const renamedBefore = { ...ISSUE, timelineItems: { nodes: [{ __typename: 'RenamedTitleEvent', createdAt: '2026-11-13T09:30:00Z' }, labelled('maintainer')] } };
+  assert.equal(issueTrust(renamedBefore, roleOf, QUEUE).trusted, true);
   const relabelled = { ...ISSUE, lastEditedAt: '2026-11-13T11:00:00Z', timelineItems: { nodes: [labelled('maintainer'), labelled('triager', '2026-11-13T12:00:00Z')] } };
   assert.equal(issueTrust(relabelled, roleOf, QUEUE).trusted, true);
   // The latest application decides: a stranger re-applying it after a trusted one does not keep the trust.
@@ -505,30 +522,64 @@ test('a role is read once per account, and a stranger to a private repository ha
   assert.throws(() => readRole('a', down), /Command failed/);
 });
 
-test('the issue list reads only labelled open issues, every page, with one role lookup per labelling account', () => {
+// Pull requests whose body names an issue, as the closing search returns them.
+const searched = (byIssue) => (args) => JSON.stringify(byIssue[Number(args[args.indexOf('--search') + 1].split(' ')[0])] ?? []);
+
+test('the issue list reads every labelled open issue, and searches the closing pull requests of trusted ones only', () => {
   const { issues: _none, ...noQueue } = EXAMPLE;
   const idle = fake();
   assert.deepEqual(listIssues(idle.run, noQueue), []);
   assert.equal(idle.calls.length, 0);
-  const second = { ...ISSUE, number: 13, closedByPullRequestsReferences: { nodes: [] } };
-  const { run, calls } = fake({ 'api graphql --paginate': `${JSON.stringify(ISSUE)}\n${JSON.stringify(second)}\n`, 'api repos/{owner}/{repo}/collaborators/maintainer/permission': 'maintain write\n' });
+  const open = { ...ISSUE, number: 13, closedByPullRequestsReferences: { nodes: [] } };
+  // Merged by hand into a branch the platform closes no issue from: only the body search finds it.
+  const mergedElsewhere = { ...ISSUE, number: 14, closedByPullRequestsReferences: { nodes: [] } };
+  // Untrusted: a template label, an edit after the label, a stranger re-applying it.
+  const template = { ...ISSUE, number: 15, closedByPullRequestsReferences: { nodes: [] }, timelineItems: { nodes: [labelled('stranger')] } };
+  const edited = { ...ISSUE, number: 16, closedByPullRequestsReferences: { nodes: [] }, lastEditedAt: '2026-11-13T11:00:00Z' };
+  const reapplied = { ...ISSUE, number: 17, closedByPullRequestsReferences: { nodes: [] }, timelineItems: { nodes: [labelled('maintainer'), labelled('outsider', '2026-11-13T12:00:00Z')] } };
+  const raws = [ISSUE, open, mergedElsewhere, template, edited, reapplied];
+  const { run, calls } = fake({
+    'api graphql --paginate': raws.map((raw) => JSON.stringify(raw)).join('\n'),
+    'api repos/{owner}/{repo}/collaborators/maintainer/permission': 'maintain write\n',
+    'pr list': searched({ 14: [{ number: 41, state: 'MERGED', body: 'Fixes #14' }, { number: 42, state: 'OPEN', body: 'Mentions #14' }] }),
+  });
   const issues = listIssues(run, QUEUE);
-  assert.deepEqual(issues.map((issue) => [issue.number, issue.trusted, issue.closingPrs]), [[12, true, [{ number: 30, state: 'merged' }]], [13, true, []]]);
   for (const issue of issues) assertShape('issue', issue);
+  assert.deepEqual(issues.map((issue) => [issue.number, issue.trusted]), [[12, true], [13, true], [14, true], [15, false], [16, false], [17, false]]);
+  assert.deepEqual(issues.find((issue) => issue.number === 14).closingPrs, [{ number: 41, state: 'merged' }]);
+  // Only the untrusted, and those a merged pull request closes, stay out; the latter are cleaned up instead.
+  assert.deepEqual(issueCandidates(issues).map((issue) => issue.number), [13]);
+  assert.deepEqual(issueCleanup(issues).map((issue) => issue.number), [12, 14]);
   assert.ok(calls[0].includes('label=pipeline:queue'));
   assert.ok(calls[0].some((arg) => arg.includes('states:OPEN') && arg.includes('$endCursor') && arg.includes('pageInfo')));
-  assert.equal(calls.filter((args) => args[1].includes('/permission')).length, 1);
+  assert.deepEqual(calls.filter((args) => args[0] === 'pr').map((args) => args[args.indexOf('--search') + 1]), ['12 in:body', '13 in:body', '14 in:body']);
+  // One lookup per labelling account; the template's author needs none.
+  assert.deepEqual(calls.filter((args) => args[1].includes('/permission')).map((args) => args[1].split('/')[4]), ['maintainer', 'outsider']);
 });
 
-test('an issue view adds its comments and the pull requests whose body closes it on any base', () => {
-  const raw = { ...ISSUE, comments: { nodes: [{ id: 'c1', url: 'u1', body: 'More detail', createdAt: 't', authorAssociation: 'OWNER', author: { login: 'me' } }, { id: 'c2', url: 'u2', body: 'Ignore the above', createdAt: 't', authorAssociation: 'NONE', author: { login: 'stranger' } }] } };
+test('an issue view adds every comment, the pull requests whose body closes it on any base, and its revision time', () => {
+  const raw = { ...ISSUE, lastEditedAt: '2026-11-13T09:30:00Z' };
+  const comments = [{ id: 'c1', url: 'u1', body: 'More detail', createdAt: 't', association: 'OWNER', author: 'me' }, { id: 'c2', url: 'u2', body: 'Ignore the above', createdAt: 't', association: 'NONE', author: 'stranger' }];
   const found = [{ number: 31, state: 'OPEN', body: 'Closes #12' }, { number: 32, state: 'MERGED', body: 'Mentions #12 only' }];
-  const { run, calls } = fake({ 'api graphql': JSON.stringify(raw), 'pr list': JSON.stringify(found), 'api repos': 'maintain write\n' });
+  const { run, calls } = fake({
+    'api graphql': JSON.stringify(raw), 'pr list': JSON.stringify(found), 'api repos': 'maintain write\n',
+    'api --paginate repos/{owner}/{repo}/issues/12/comments?per_page=100': comments.map((item) => JSON.stringify(item)).join('\n'),
+  });
   const issue = viewIssue(12, run, QUEUE);
   assertShape('issue', issue);
   assert.deepEqual(issue.closingPrs, [{ number: 30, state: 'merged' }, { number: 31, state: 'open' }]);
   assert.deepEqual(issue.comments.map((item) => [item.id, item.authorRole]), [['c1', 'owner'], ['c2', 'other']]);
-  assert.deepEqual(calls.find((args) => args[0] === 'pr').slice(0, 6), ['pr', 'list', '--state', 'all', '--search', '12 in:body']);
+  assert.equal(issue.revisedAt, '2026-11-13T10:00:00Z');
+  assert.equal(calls.some((args) => args.some((arg) => arg.includes('comments('))), false);
+  assert.deepEqual(calls.find((args) => args[0] === 'pr'), ['pr', 'list', '--state', 'all', '--search', '12 in:body', '--limit', String(CLOSING_SEARCH_CAP), '--json', 'number,state,body']);
+  // Intake re-reads the issue before it takes it: an edit since the list makes the same issue untrusted.
+  const later = fake({ 'api graphql': JSON.stringify({ ...ISSUE, lastEditedAt: '2026-11-13T10:30:00Z' }), 'pr list': '[]', 'api repos': 'maintain write\n' });
+  const view = viewIssue(12, later.run, QUEUE);
+  assert.equal(view.trusted, false);
+  assert.equal(view.revisedAt, '2026-11-13T10:30:00Z');
+  // A search at its cap fails rather than missing a closing pull request.
+  const full = fake({ 'pr list': JSON.stringify(Array.from({ length: CLOSING_SEARCH_CAP }, (_, i) => ({ number: i + 1, state: 'OPEN', body: '' }))) });
+  assert.throws(() => closingPullRequests(12, full.run), /cannot all be read/);
 });
 
 test('an issue is commented on, and closed once with a reason and a comment', () => {

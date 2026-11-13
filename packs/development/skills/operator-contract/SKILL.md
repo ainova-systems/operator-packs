@@ -228,7 +228,8 @@ the label that stands.
 
 When intake itself cannot choose because every candidate needs the owner, it asks nowhere on a
 PR: it records each exact question on its queue item, the way profile `flow_queue` marks an item as
-waiting for a decision, and ends `noop` naming them.
+waiting for a decision, and ends `noop` naming them. An issue never needs this: it is taken, and its
+questions are asked on its pull request.
 
 ## Marking the pipeline's own comments
 

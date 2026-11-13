@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { authorRole, checkOperatorConfig, checks, ciFromRuns, claim, closeIssue, closesOf, CLOSING_SEARCH_CAP, closingPullRequests, comment, commentIssue, createPr, draftPr, editPr, events, execute, factor, FLAGS, gh, isRead, issueTrust, listIssues, listPrs, merge, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readRole, readUnresolvedThreads, readyPr, resolveThread, threads, UsageError, viewIssue, viewPr } from './forge-github.mjs';
+import { authorRole, checkOperatorConfig, checks, ciFromRuns, claim, closeIssue, closesOf, CLOSING_SEARCH_CAP, closingPullRequests, comment, commentIssue, createPr, draftPr, editPr, events, execute, factor, FLAGS, gh, isRead, issueTrust, listIssues, listPrs, merge, normalizeIssue, normalizePr, notes, prBody, prFiles, readInlineReviews, readPullRequests, readRole, readUnresolvedThreads, readyPr, repositoryOf, resolveThread, threads, UsageError, viewIssue, viewPr } from './forge-github.mjs';
 import { issueCandidates, issueCleanup } from './discovery-contract.mjs';
 import { assertShape } from './forge-contract.mjs';
 
@@ -480,6 +480,17 @@ test('a pull request body closes the issues a closing keyword names outside code
   assert.deepEqual(closesOf(documented), [17]);
   // An unclosed fence runs to the end of the body.
   assert.deepEqual(closesOf('Closes #1\n```\nCloses #2'), [1]);
+  // Indented code after a blank line closes nothing; an indented paragraph continuation or list content does.
+  assert.deepEqual(closesOf('    Closes #1\n\n\tCloses #2'), []);
+  assert.deepEqual(closesOf('text\n    Closes #3\n- item\n\n    Closes #4'), [3, 4]);
+  // A backtick run with backticks after it on the line is a code span, not a fence that hides the rest.
+  assert.deepEqual(closesOf('```example```\nCloses #5 ``a`b``'), [5]);
+  // This repository's issues by qualified name or URL, never another repository's.
+  assert.deepEqual(closesOf('Fixes o/r#6, closes https://github.com/o/r/issues/7, fixes other/r#8, closes https://github.com/other/r/issues/9', 'o/r'), [6, 7]);
+  assert.deepEqual(closesOf('Fixes o/r#6'), []);
+  assert.deepEqual(normalizePr({ ...RAW, url: 'https://github.com/o/r/pull/1', body: 'Fixes O/R#10' }).closes, [10]);
+  assert.equal(repositoryOf('https://github.com/o/r/pull/1'), 'o/r');
+  assert.equal(repositoryOf(undefined), null);
 });
 
 test('an issue is trusted only from a trusted author, or labelled by someone who can triage and not edited since', () => {
@@ -512,6 +523,17 @@ test('an issue is trusted only from a trusted author, or labelled by someone who
   assert.equal(issueTrust(reapplied, roleOf, QUEUE).trusted, false);
 });
 
+test('an issue is revised by an edit, a rename, the queue label or an owner comment, never by anyone else\'s comment', () => {
+  const comment = (association, createdAt, fields = {}) => ({ authorAssociation: association, createdAt, lastEditedAt: null, body: 'text', ...fields });
+  const revised = (fields) => normalizeIssue({ ...ISSUE, ...fields }, roleOf, QUEUE).revisedAt;
+  assert.equal(revised({}), '2026-11-13T10:00:00Z');
+  assert.equal(revised({ lastEditedAt: '2026-11-13T10:30:00Z' }), '2026-11-13T10:30:00Z');
+  assert.equal(revised({ comments: { nodes: [comment('OWNER', '2026-11-13T11:00:00Z')] } }), '2026-11-13T11:00:00Z');
+  assert.equal(revised({ comments: { nodes: [comment('MEMBER', '2026-11-13T10:10:00Z', { lastEditedAt: '2026-11-13T11:30:00Z' })] } }), '2026-11-13T11:30:00Z');
+  // An outsider's comment and the pipeline's own status line ask nothing again.
+  assert.equal(revised({ comments: { nodes: [comment('NONE', '2026-11-13T12:00:00Z'), comment('OWNER', '2026-11-13T12:30:00Z', { body: 'Taken into the development pipeline as #31.\n<!-- operator:note -->' })] } }), '2026-11-13T10:00:00Z');
+});
+
 test('a role is read once per account, and a stranger to a private repository has none', () => {
   assert.equal(readRole('a', fake({ 'api repos/{owner}/{repo}/collaborators/a/permission': 'triage read\n' }).run), 'triage');
   assert.equal(readRole('a', fake({ 'api repos': 'custom write\n' }).run), 'write');
@@ -541,18 +563,20 @@ test('the issue list reads every labelled open issue, and searches the closing p
   const { run, calls } = fake({
     'api graphql --paginate': raws.map((raw) => JSON.stringify(raw)).join('\n'),
     'api repos/{owner}/{repo}/collaborators/maintainer/permission': 'maintain write\n',
-    'pr list': searched({ 14: [{ number: 41, state: 'MERGED', body: 'Fixes #14' }, { number: 42, state: 'OPEN', body: 'Mentions #14' }] }),
+    'pr list': searched({ 14: [{ number: 41, state: 'MERGED', body: 'Fixes #14' }, { number: 42, state: 'OPEN', body: 'Mentions #14' }], 16: [{ number: 43, state: 'MERGED', url: 'https://github.com/o/r/pull/43', body: 'Fixes o/r#16' }] }),
   });
   const issues = listIssues(run, QUEUE);
   for (const issue of issues) assertShape('issue', issue);
   assert.deepEqual(issues.map((issue) => [issue.number, issue.trusted]), [[12, true], [13, true], [14, true], [15, false], [16, false], [17, false]]);
   assert.deepEqual(issues.find((issue) => issue.number === 14).closingPrs, [{ number: 41, state: 'merged' }]);
-  // Only the untrusted, and those a merged pull request closes, stay out; the latter are cleaned up instead.
+  // Only the untrusted, and those a merged pull request closes, stay out; the latter are cleaned up instead,
+  // including one edited after it was taken (16), whose closing pull request is still searched.
   assert.deepEqual(issueCandidates(issues).map((issue) => issue.number), [13]);
-  assert.deepEqual(issueCleanup(issues).map((issue) => issue.number), [12, 14]);
+  assert.deepEqual(issueCleanup(issues).map((issue) => issue.number), [12, 14, 16]);
   assert.ok(calls[0].includes('label=pipeline:queue'));
   assert.ok(calls[0].some((arg) => arg.includes('states:OPEN') && arg.includes('$endCursor') && arg.includes('pageInfo')));
-  assert.deepEqual(calls.filter((args) => args[0] === 'pr').map((args) => args[args.indexOf('--search') + 1]), ['12 in:body', '13 in:body', '14 in:body']);
+  // Searched: what can be taken, and what someone who can triage once labelled; never the template's issue (15).
+  assert.deepEqual(calls.filter((args) => args[0] === 'pr').map((args) => args[args.indexOf('--search') + 1]), ['12 in:body', '13 in:body', '14 in:body', '16 in:body', '17 in:body']);
   // One lookup per labelling account; the template's author needs none.
   assert.deepEqual(calls.filter((args) => args[1].includes('/permission')).map((args) => args[1].split('/')[4]), ['maintainer', 'outsider']);
 });
@@ -570,8 +594,9 @@ test('an issue view adds every comment, the pull requests whose body closes it o
   assert.deepEqual(issue.closingPrs, [{ number: 30, state: 'merged' }, { number: 31, state: 'open' }]);
   assert.deepEqual(issue.comments.map((item) => [item.id, item.authorRole]), [['c1', 'owner'], ['c2', 'other']]);
   assert.equal(issue.revisedAt, '2026-11-13T10:00:00Z');
-  assert.equal(calls.some((args) => args.some((arg) => arg.includes('comments('))), false);
-  assert.deepEqual(calls.find((args) => args[0] === 'pr'), ['pr', 'list', '--state', 'all', '--search', '12 in:body', '--limit', String(CLOSING_SEARCH_CAP), '--json', 'number,state,body']);
+  // Every comment is read page by page, not only the latest hundred the revision time looks at.
+  assert.ok(calls.some((args) => args[1] === '--paginate' && args[2] === 'repos/{owner}/{repo}/issues/12/comments?per_page=100'));
+  assert.deepEqual(calls.find((args) => args[0] === 'pr'), ['pr', 'list', '--state', 'all', '--search', '12 in:body', '--limit', String(CLOSING_SEARCH_CAP), '--json', 'number,state,body,url']);
   // Intake re-reads the issue before it takes it: an edit since the list makes the same issue untrusted.
   const later = fake({ 'api graphql': JSON.stringify({ ...ISSUE, lastEditedAt: '2026-11-13T10:30:00Z' }), 'pr list': '[]', 'api repos': 'maintain write\n' });
   const view = viewIssue(12, later.run, QUEUE);

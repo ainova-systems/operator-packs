@@ -42,7 +42,8 @@ the `operator-contract` skill first: input, result, claim and markers follow it.
 3. **Apply the conflict gate.** Skip a candidate already represented by any open PR, including
    manual or failed attempts; an issue is represented by any open PR that `closes` it. Skip overlap with any open PR's files or feature: the same shared
    module, schema or route. Skip items waiting on a decision or
-   on work not yet shipped. Read the likely implementation scope; a different filename does not
+   on work not yet shipped; an issue is never held for a decision here, because its questions go on
+   its pull request: it is taken, and `operator-plan` asks the owner there. Read the likely implementation scope; a different filename does not
    prove independence. Nothing pickable → put every candidate's skip reason in the result message
    and end `noop`. Every candidate needing the owner → the contract's "intake itself cannot choose".
 4. **Open the selected attempt.** Re-check that the slot is free, quotas and overlap immediately before branching.

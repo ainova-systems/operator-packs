@@ -130,30 +130,75 @@ export function gh(args, { exec = execFileSync, wait = pause, attempts = 3 } = {
 const PR_FIELDS = 'number,url,title,body,isDraft,state,headRefName,headRefOid,baseRefName,mergeable,labels,milestone,createdAt,author';
 const MERGEABLE = { MERGEABLE: 'clean', CONFLICTING: 'conflicting' };
 
-/** A Markdown body without its fenced code, code spans and HTML comments: the platform reads no reference in them. */
+// The columns a line is indented by, a tab reaching the next multiple of four.
+const indentOf = (line) => {
+  let width = 0;
+  for (const char of line) {
+    if (char === ' ') width += 1;
+    else if (char === '\t') width += 4 - (width % 4);
+    else break;
+  }
+  return width;
+};
+const LIST_ITEM = /^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/;
+
+/**
+ * A Markdown body without its fenced and indented code, code spans and HTML comments: the platform reads
+ * no reference in them. Indented lines inside a list are list content, not code.
+ */
 function proseOf(body) {
   const prose = [];
   let fence = null;
+  let indented = false;
+  let afterBlank = true;
+  let inList = false;
   for (const line of String(body ?? '').replace(/<!--[\s\S]*?(?:-->|$)/g, ' ').split('\n')) {
-    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    const blank = line.trim() === '';
     if (fence) {
-      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && marker[2].trim() === '') fence = null;
+      const close = /^ {0,3}(`+|~+)[ \t]*$/.exec(line)?.[1];
+      if (close && close[0] === fence[0] && close.length >= fence.length) fence = null;
       continue;
     }
-    if (marker) fence = marker[1];
-    else prose.push(line);
+    if (indented && (blank || indentOf(line) >= 4)) continue;
+    indented = false;
+    if (!blank && afterBlank && !inList && indentOf(line) >= 4) {
+      indented = true;
+      continue;
+    }
+    // A backtick fence's info string holds no backtick: ```x``` on its own line is a code span.
+    const open = /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})/.exec(line)?.[1];
+    if (open) {
+      fence = open;
+      afterBlank = false;
+      continue;
+    }
+    if (!blank) inList = LIST_ITEM.test(line) || (inList && indentOf(line) > 0);
+    afterBlank = blank;
+    prose.push(line);
   }
-  return prose.join('\n').replace(/(`+)[\s\S]*?\1/g, ' ');
+  // A code span closes on a backtick run of the same length, within its paragraph.
+  return prose.join('\n').replace(/(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g, ' ');
 }
+
+/** `owner/name` of the repository a platform URL points into, or null. */
+export function repositoryOf(url) {
+  const match = /^https:\/\/[^/]+\/([^/]+\/[^/#?]+)/.exec(String(url ?? ''));
+  return match ? match[1] : null;
+}
+
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 
 /**
  * The issues of this repository a pull request body closes with a closing keyword (`Closes #12`,
- * `fixes: #12`), outside code. Read from the body itself: the platform links a keyword only when the
- * pull request targets the default branch, and the pipeline needs the link whatever the base.
+ * `fixes: #12`, and with `repository` given, `owner/name#12` or the issue's URL), outside code. Read
+ * from the body itself: the platform links a keyword only when the pull request targets the default
+ * branch, and the pipeline needs the link whatever the base. Another repository's issues are never named.
  */
-export function closesOf(body) {
+export function closesOf(body, repository = null) {
+  const own = repository ? `|${escape(repository)}#|https?://[^/\\s]+/${escape(repository)}/issues/` : '';
+  const pattern = new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\\s+(?:#${own})(\\d+)\\b`, 'gi');
   const numbers = new Set();
-  for (const match of proseOf(body).matchAll(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)\b/gi)) numbers.add(Number(match[1]));
+  for (const match of proseOf(body).matchAll(pattern)) numbers.add(Number(match[1]));
   return [...numbers].sort((a, b) => a - b);
 }
 
@@ -173,7 +218,7 @@ export function normalizePr(raw) {
     milestone: raw.milestone?.title ?? null,
     createdAt: raw.createdAt,
     author: raw.author?.login ?? null,
-    closes: closesOf(raw.body),
+    closes: closesOf(raw.body, repositoryOf(raw.url)),
   };
 }
 
@@ -372,7 +417,8 @@ export function events(number, run = gh) {
 
 const ISSUE_FIELDS = 'number url title body state stateReason createdAt lastEditedAt authorAssociation author{login} labels(first:100){nodes{name}} '
   + 'closedByPullRequestsReferences(first:25,includeClosedPrs:true){nodes{number state}} '
-  + 'timelineItems(last:100,itemTypes:[LABELED_EVENT,RENAMED_TITLE_EVENT]){nodes{__typename ... on LabeledEvent{createdAt label{name} actor{login}} ... on RenamedTitleEvent{createdAt}}}';
+  + 'timelineItems(last:100,itemTypes:[LABELED_EVENT,RENAMED_TITLE_EVENT]){nodes{__typename ... on LabeledEvent{createdAt label{name} actor{login}} ... on RenamedTitleEvent{createdAt}}} '
+  + 'comments(last:100){nodes{authorAssociation createdAt lastEditedAt body}}';
 const ISSUES_QUERY = `query($owner:String!,$name:String!,$label:String!,$endCursor:String){repository(owner:$owner,name:$name){issues(first:50,after:$endCursor,states:OPEN,labels:[$label],orderBy:{field:CREATED_AT,direction:ASC}){nodes{${ISSUE_FIELDS}} pageInfo{hasNextPage endCursor}}}}`;
 const ISSUE_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){${ISSUE_FIELDS}}}}`;
 
@@ -419,13 +465,27 @@ export function issueTrust(raw, roleOf, config = operatorConfig()) {
 }
 
 /**
- * When what intake would take from an issue, or its trust, last changed: its creation, the latest text
- * edit, title rename or queue-label application. A comment changes none of them, so nobody's comment asks
- * discovery again.
+ * Whether someone who can triage ever applied the queue label, or the author speaks for the project: an
+ * issue the pipeline may have taken, so its closing pull requests are searched even once it is untrusted.
  */
-function revisedAt(raw, label) {
+function approvedOnce(raw, roleOf, config) {
+  if (config.allowedAuthors.includes(raw.authorAssociation)) return true;
+  const roleless = (actor) => actor === raw.author?.login && !ASSOCIATED.has(raw.authorAssociation);
+  return (raw.timelineItems?.nodes ?? []).some((item) => item.__typename === 'LabeledEvent' && item.label?.name === config.issues?.label
+    && item.actor?.login && !roleless(item.actor.login) && LABELLING_ROLES.has(roleOf(item.actor.login)));
+}
+
+/**
+ * When what intake would take from an issue, or its trust, last changed: its creation, the latest text
+ * edit, title rename or queue-label application, and an owner's or member's comment among the latest 100
+ * added or edited, the pipeline's own excepted. Nobody else's comment asks discovery again.
+ */
+function revisedAt(raw, config) {
+  const label = config.issues?.label;
+  const requirements = (raw.comments?.nodes ?? []).filter((item) => authorRole(item.authorAssociation, config) !== 'other' && !String(item.body ?? '').includes('<!-- operator:'));
   const times = [raw.createdAt, raw.lastEditedAt, ...(raw.timelineItems?.nodes ?? [])
-    .filter((item) => item.__typename === 'RenamedTitleEvent' || (item.__typename === 'LabeledEvent' && item.label?.name === label)).map((item) => item.createdAt)];
+    .filter((item) => item.__typename === 'RenamedTitleEvent' || (item.__typename === 'LabeledEvent' && item.label?.name === label)).map((item) => item.createdAt),
+    ...requirements.flatMap((item) => [item.createdAt, item.lastEditedAt])];
   return times.filter(Boolean).reduce((latest, time) => (Date.parse(time) > Date.parse(latest) ? time : latest));
 }
 
@@ -446,7 +506,7 @@ export function normalizeIssue(raw, roleOf, config = operatorConfig(), closing =
     author: raw.author?.login ?? null,
     authorRole: authorRole(raw.authorAssociation, config),
     createdAt: raw.createdAt,
-    revisedAt: revisedAt(raw, config.issues?.label),
+    revisedAt: revisedAt(raw, config),
     ...issueTrust(raw, roleOf, config),
     closingPrs: [...prs.values()].sort((a, b) => a.number - b.number),
   };
@@ -469,14 +529,15 @@ export const CLOSING_SEARCH_CAP = 1000;
  * one only when it targets the default branch, so a pull request merged into another branch is found here.
  */
 export function closingPullRequests(number, run = gh) {
-  const found = JSON.parse(run(['pr', 'list', '--state', 'all', '--search', `${number} in:body`, '--limit', String(CLOSING_SEARCH_CAP), '--json', 'number,state,body']));
+  const found = JSON.parse(run(['pr', 'list', '--state', 'all', '--search', `${number} in:body`, '--limit', String(CLOSING_SEARCH_CAP), '--json', 'number,state,body,url']));
   if (found.length >= CLOSING_SEARCH_CAP) throw new Error(`${CLOSING_SEARCH_CAP} or more pull requests mention #${number}: the ones that close it cannot all be read`);
-  return found.filter((pr) => closesOf(pr.body).includes(number)).map((pr) => ({ number: pr.number, state: pr.state }));
+  return found.filter((pr) => closesOf(pr.body, repositoryOf(pr.url)).includes(number)).map((pr) => ({ number: pr.number, state: pr.state }));
 }
 
 /**
- * Open issues carrying the queue label, oldest first; none when the project has no issue queue. A trusted
- * one, the only kind that can be taken, also has its closing pull requests searched: one search each.
+ * Open issues carrying the queue label, oldest first; none when the project has no issue queue. One the
+ * pipeline can take or may have taken - trusted now, or labelled by someone who can triage at some point -
+ * also has its closing pull requests searched, one search each; an outsider's template label costs none.
  */
 export function listIssues(run = gh, config = operatorConfig()) {
   if (!config.issues) return [];
@@ -486,7 +547,7 @@ export function listIssues(run = gh, config = operatorConfig()) {
   return output.split('\n').filter(Boolean).map((line) => {
     const raw = JSON.parse(line);
     const issue = normalizeIssue(raw, roleOf, config);
-    return issue.trusted ? normalizeIssue(raw, roleOf, config, closingPullRequests(raw.number, run)) : issue;
+    return issue.trusted || approvedOnce(raw, roleOf, config) ? normalizeIssue(raw, roleOf, config, closingPullRequests(raw.number, run)) : issue;
   });
 }
 
@@ -531,7 +592,7 @@ export function closeIssue(number, reason, bodyFile, run = gh) {
 export const LIST_CONVERSATION_CAP = 100;
 
 export function readPullRequests(run = gh) {
-  const prs = JSON.parse(run(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,isDraft,isCrossRepository,milestone,labels,headRefOid,headRefName,createdAt,body,comments,reviews,mergeable']));
+  const prs = JSON.parse(run(['pr', 'list', '--state', 'open', '--limit', '200', '--json', 'number,url,isDraft,isCrossRepository,milestone,labels,headRefOid,headRefName,createdAt,body,comments,reviews,mergeable']));
   for (const pr of prs) {
     if ((pr.comments ?? []).length < LIST_CONVERSATION_CAP && (pr.reviews ?? []).length < LIST_CONVERSATION_CAP) continue;
     const full = JSON.parse(run(['pr', 'view', String(pr.number), '--json', 'comments,reviews']));

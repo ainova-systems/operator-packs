@@ -43,7 +43,7 @@ Plan captures the intended result before any implementation; it is the `plan` op
    which carries only the pipeline's one-line status comments - and no feature-sized plan, the plan
    goes in the pull request body under a `## Plan` heading instead of a commit; a rerun replaces that
    section, never appends to it.
-4. **Write the plan** on the queue item: capture, decisions, deviations and testable slices, each
+4. **Write the plan** on the queue item (in the pull request body when step 3 says so): capture, decisions, deviations and testable slices, each
    naming its files, siblings, skills, integration points and verification. Feature-sized work gets
    its plan from profile `flow_plan`, linked from the item and the PR, never a second plan beside
    it. A real open question goes to the owner (`resume: plan`); commit settled planning first and
@@ -52,8 +52,9 @@ Plan captures the intended result before any implementation; it is the `plan` op
    `verify_section`) with the captured criteria verbatim, one observable step per criterion
    (`git-open-pr` sets the same rule when core is installed). Edit the live body, keeping every
    other section and block intact: profile `forge_cli pr body <n>` into a file, change it there, and
-   write it back with `forge_cli pr edit <n> --body-file <file>`. Commit and push the plan through
-   profile `commit_skill`; an identical capture already published is reused, never committed empty.
+   write it back with `forge_cli pr edit <n> --body-file <file>`. Commit and push a plan written in the
+   repository through profile `commit_skill`; an identical capture already published is reused, never
+   committed empty.
 6. **Hand off.** All in-scope questions settled → re-check live state, then one call moves the PR
    to the development milestone and drops `ai:processing`. Result `done` with the hand-off request
    (`operator-contract`).
@@ -64,8 +65,8 @@ Plan captures the intended result before any implementation; it is the `plan` op
 
 ## Verify
 
-- The plan commit is on the pull request's head (or the body holds the plan of a pull request
-  without a queue item), the verification section is filled, and the pull
+- The plan commit is on the pull request's head (or the body holds the plan of a pull request whose
+  queue item is not in the repository: none, or an issue), the verification section is filled, and the pull
   request sits in the development milestone with no claim left on it.
 
 ## Scope / hand-off

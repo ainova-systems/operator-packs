@@ -87,8 +87,9 @@ export function issueCandidates(issues, prs = []) {
 /**
  * Open queue issues a merged pull request closes (discovery-contract.md > Queues): a merge the platform
  * closes no issue from left them open. None is a candidate; discovery asks intake for them all the same,
- * and intake closes each one naming that pull request.
+ * and intake closes each one naming that pull request. A pull request whose body changed at or after its
+ * merge is no evidence: its author may have added the reference later, so that issue is left to the owner.
  */
 export function issueCleanup(issues) {
-  return issues.filter((issue) => issue.state === 'open' && (issue.closingPrs ?? []).some((pr) => pr.state === 'merged'));
+  return issues.filter((issue) => issue.state === 'open' && (issue.closingPrs ?? []).some((pr) => pr.state === 'merged' && !pr.editedAfterMerge));
 }

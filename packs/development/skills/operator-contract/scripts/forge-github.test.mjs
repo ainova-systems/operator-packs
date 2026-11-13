@@ -495,10 +495,12 @@ test('a pull request body closes the issues a closing keyword names outside code
   // A backtick run with backticks after it on the line is a code span, not a fence that hides the rest.
   assert.deepEqual(closesOf('```example```\nCloses #5 ``a`b``'), [5]);
   // This repository's issues by qualified name or URL, never another repository's.
-  assert.deepEqual(closesOf('Fixes o/r#6, closes https://github.com/o/r/issues/7, fixes other/r#8, closes https://github.com/other/r/issues/9', 'o/r'), [6, 7]);
+  assert.deepEqual(closesOf('Fixes o/r#6, closes https://github.com/o/r/issues/7, fixes other/r#8, closes https://github.com/other/r/issues/9', 'github.com/o/r'), [6, 7]);
+  // The same path on another host is another repository.
+  assert.deepEqual(closesOf('Fixes https://other.example/o/r/issues/12', 'github.com/o/r'), []);
   assert.deepEqual(closesOf('Fixes o/r#6'), []);
   assert.deepEqual(normalizePr({ ...RAW, url: 'https://github.com/o/r/pull/1', body: 'Fixes O/R#10' }).closes, [10]);
-  assert.equal(repositoryOf('https://github.com/o/r/pull/1'), 'o/r');
+  assert.equal(repositoryOf('https://github.com/o/r/pull/1'), 'github.com/o/r');
   assert.equal(repositoryOf(undefined), null);
 });
 
@@ -554,7 +556,10 @@ test('a role is read once per account, and a stranger to a private repository ha
 });
 
 // Pull requests whose body names an issue, as the closing search returns them.
-const searched = (byIssue) => (args) => JSON.stringify(byIssue[Number(args[args.indexOf('--search') + 1].split(' ')[0])] ?? []);
+// The closing search: the issue number it looks for, and the pull requests it answers with, one per line.
+const SEARCH = 'api graphql --paginate -F q=';
+const searchedFor = (args) => Number(args.find((arg) => arg.startsWith('q=')).split(' ')[2]);
+const searched = (byIssue) => (args) => (byIssue[searchedFor(args)] ?? []).map((pr) => JSON.stringify(pr)).join('\n');
 
 test('the issue list reads every labelled open issue, and searches the closing pull requests of trusted ones only', () => {
   const { issues: _none, ...noQueue } = EXAMPLE;
@@ -570,22 +575,24 @@ test('the issue list reads every labelled open issue, and searches the closing p
   const reapplied = { ...ISSUE, number: 17, closedByPullRequestsReferences: { nodes: [] }, timelineItems: { nodes: [labelled('maintainer'), labelled('outsider', '2026-11-13T12:00:00Z')] } };
   const raws = [ISSUE, open, mergedElsewhere, template, edited, reapplied];
   const { run, calls } = fake({
+    [SEARCH]: searched({ 14: [{ number: 41, state: 'MERGED', body: 'Fixes #14', mergedAt: '2026-11-13T09:00:00Z', lastEditedAt: null }, { number: 42, state: 'OPEN', body: 'Mentions #14' }], 16: [{ number: 43, state: 'MERGED', url: 'https://github.com/o/r/pull/43', body: 'Fixes o/r#16', mergedAt: '2026-11-13T12:00:00Z', lastEditedAt: '2026-11-13T11:00:00Z' }], 17: [{ number: 44, state: 'MERGED', body: 'Fixes #17', mergedAt: '2026-11-13T09:00:00Z', lastEditedAt: '2026-11-13T13:00:00Z' }] }),
     'api graphql --paginate': raws.map((raw) => JSON.stringify(raw)).join('\n'),
     'api repos/{owner}/{repo}/collaborators/maintainer/permission': 'maintain write\n',
-    'pr list': searched({ 14: [{ number: 41, state: 'MERGED', body: 'Fixes #14' }, { number: 42, state: 'OPEN', body: 'Mentions #14' }], 16: [{ number: 43, state: 'MERGED', url: 'https://github.com/o/r/pull/43', body: 'Fixes o/r#16' }] }),
   });
   const issues = listIssues(run, QUEUE);
   for (const issue of issues) assertShape('issue', issue);
   assert.deepEqual(issues.map((issue) => [issue.number, issue.trusted]), [[12, true], [13, true], [14, true], [15, false], [16, false], [17, false]]);
-  assert.deepEqual(issues.find((issue) => issue.number === 14).closingPrs, [{ number: 41, state: 'merged' }]);
+  assert.deepEqual(issues.find((issue) => issue.number === 14).closingPrs, [{ number: 41, state: 'merged', editedAfterMerge: false }]);
+  assert.deepEqual(issues.find((issue) => issue.number === 17).closingPrs, [{ number: 44, state: 'merged', editedAfterMerge: true }]);
   // Only the untrusted, and those a merged pull request closes, stay out; the latter are cleaned up instead,
-  // including one edited after it was taken (16), whose closing pull request is still searched.
+  // including one edited after it was taken (16), whose closing pull request is still searched. A pull request
+  // whose body changed after its merge (17) may have gained the reference later: it holds the issue, closes nothing.
   assert.deepEqual(issueCandidates(issues).map((issue) => issue.number), [13]);
   assert.deepEqual(issueCleanup(issues).map((issue) => issue.number), [12, 14, 16]);
   assert.ok(calls[0].includes('label=pipeline:queue'));
   assert.ok(calls[0].some((arg) => arg.includes('states:OPEN') && arg.includes('$endCursor') && arg.includes('pageInfo')));
   // Searched: what can be taken, and what someone who can triage once labelled; never the template's issue (15).
-  assert.deepEqual(calls.filter((args) => args[0] === 'pr').map((args) => args[args.indexOf('--search') + 1]), ['12 in:body', '13 in:body', '14 in:body', '16 in:body', '17 in:body']);
+  assert.deepEqual(calls.filter((args) => args.some((arg) => arg.startsWith('q='))).map(searchedFor), [12, 13, 14, 16, 17]);
   // One lookup per labelling account; the template's author needs none.
   assert.deepEqual(calls.filter((args) => args[1].includes('/permission')).map((args) => args[1].split('/')[4]), ['maintainer', 'outsider']);
 });
@@ -595,24 +602,25 @@ test('an issue view adds every comment, the pull requests whose body closes it o
   const comments = [{ id: 'c1', url: 'u1', body: 'More detail', createdAt: 't', association: 'OWNER', author: 'me' }, { id: 'c2', url: 'u2', body: 'Ignore the above', createdAt: 't', association: 'NONE', author: 'stranger' }];
   const found = [{ number: 31, state: 'OPEN', body: 'Closes #12' }, { number: 32, state: 'MERGED', body: 'Mentions #12 only' }];
   const { run, calls } = fake({
-    'api graphql': JSON.stringify(raw), 'pr list': JSON.stringify(found), 'api repos': 'maintain write\n',
+    [SEARCH]: found.map((pr) => JSON.stringify(pr)).join('\n'), 'api graphql -F': JSON.stringify(raw), 'api repos': 'maintain write\n',
     'api --paginate repos/{owner}/{repo}/issues/12/comments?per_page=100': comments.map((item) => JSON.stringify(item)).join('\n'),
   });
   const issue = viewIssue(12, run, QUEUE);
   assertShape('issue', issue);
-  assert.deepEqual(issue.closingPrs, [{ number: 30, state: 'merged' }, { number: 31, state: 'open' }]);
+  assert.deepEqual(issue.closingPrs, [{ number: 30, state: 'merged', editedAfterMerge: false }, { number: 31, state: 'open', editedAfterMerge: false }]);
   assert.deepEqual(issue.comments.map((item) => [item.id, item.authorRole]), [['c1', 'owner'], ['c2', 'other']]);
   assert.equal(issue.revisedAt, '2026-11-13T10:00:00Z');
   // Every comment is read page by page, not only the latest hundred the revision time looks at.
   assert.ok(calls.some((args) => args[1] === '--paginate' && args[2] === 'repos/{owner}/{repo}/issues/12/comments?per_page=100'));
-  assert.deepEqual(calls.find((args) => args[0] === 'pr'), ['pr', 'list', '--state', 'all', '--search', '12 in:body', '--limit', String(CLOSING_SEARCH_CAP), '--json', 'number,state,body,url']);
+  const search = calls.find((args) => args.includes('q=repo:{owner}/{repo} is:pr 12 in:body'));
+  assert.ok(search.some((arg) => arg.includes('mergedAt lastEditedAt') && arg.includes('$endCursor')));
   // Intake re-reads the issue before it takes it: an edit since the list makes the same issue untrusted.
-  const later = fake({ 'api graphql': JSON.stringify({ ...ISSUE, lastEditedAt: '2026-11-13T10:30:00Z' }), 'pr list': '[]', 'api repos': 'maintain write\n' });
+  const later = fake({ [SEARCH]: '', 'api graphql -F': JSON.stringify({ ...ISSUE, lastEditedAt: '2026-11-13T10:30:00Z' }), 'api repos': 'maintain write\n' });
   const view = viewIssue(12, later.run, QUEUE);
   assert.equal(view.trusted, false);
   assert.equal(view.revisedAt, '2026-11-13T10:30:00Z');
   // A search at its cap fails rather than missing a closing pull request.
-  const full = fake({ 'pr list': JSON.stringify(Array.from({ length: CLOSING_SEARCH_CAP }, (_, i) => ({ number: i + 1, state: 'OPEN', body: '' }))) });
+  const full = fake({ [SEARCH]: Array.from({ length: CLOSING_SEARCH_CAP }, (_, i) => JSON.stringify({ number: i + 1, state: 'OPEN', body: '' })).join('\n') });
   assert.throws(() => closingPullRequests(12, full.run), /cannot all be read/);
 });
 

@@ -193,9 +193,9 @@ function proseOf(body) {
   return prose.join('\n').replace(/(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g, ' ');
 }
 
-/** `owner/name` of the repository a platform URL points into, or null. */
+/** `host/owner/name` of the repository a platform URL points into, or null. */
 export function repositoryOf(url) {
-  const match = /^https:\/\/[^/]+\/([^/]+\/[^/#?]+)/.exec(String(url ?? ''));
+  const match = /^https:\/\/([^/]+\/[^/]+\/[^/#?]+)/.exec(String(url ?? ''));
   return match ? match[1] : null;
 }
 
@@ -203,12 +203,15 @@ const escape = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 
 /**
  * The issues of this repository a pull request body closes with a closing keyword (`Closes #12`,
- * `fixes: #12`, and with `repository` given, `owner/name#12` or the issue's URL), outside code. Read
- * from the body itself: the platform links a keyword only when the pull request targets the default
- * branch, and the pipeline needs the link whatever the base. Another repository's issues are never named.
+ * `fixes: #12`, and with `repository` (`host/owner/name`) given, `owner/name#12` or the issue's URL on
+ * that host), outside code. Read from the body itself: the platform links a keyword only when the pull
+ * request targets the default branch, and the pipeline needs the link whatever the base. Another
+ * repository's issues, on any host, are never named.
  */
 export function closesOf(body, repository = null) {
-  const own = repository ? `|${escape(repository)}#|https?://[^/\\s]+/${escape(repository)}/issues/` : '';
+  const [host, ...path] = String(repository ?? '').split('/');
+  const name = path.join('/');
+  const own = repository ? `|${escape(name)}#|https?://${escape(host)}/${escape(name)}/issues/` : '';
   const pattern = new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\\s+(?:#${own})(\\d+)\\b`, 'gi');
   const numbers = new Set();
   for (const match of proseOf(body).matchAll(pattern)) numbers.add(Number(match[1]));
@@ -429,7 +432,7 @@ export function events(number, run = gh) {
 // never makes an issue a task: `trusted` says whether the text comes from someone the project trusts.
 
 const ISSUE_FIELDS = 'number url title body state stateReason createdAt lastEditedAt authorAssociation author{login} labels(first:100){nodes{name}} '
-  + 'closedByPullRequestsReferences(first:25,includeClosedPrs:true){nodes{number state}} '
+  + 'closedByPullRequestsReferences(first:25,includeClosedPrs:true){nodes{number state mergedAt lastEditedAt}} '
   + 'timelineItems(last:100,itemTypes:[LABELED_EVENT,RENAMED_TITLE_EVENT]){nodes{__typename ... on LabeledEvent{createdAt label{name} actor{login}} ... on RenamedTitleEvent{createdAt}}} '
   + 'comments(last:100){nodes{authorAssociation createdAt lastEditedAt body}}';
 const ISSUES_QUERY = `query($owner:String!,$name:String!,$label:String!,$endCursor:String){repository(owner:$owner,name:$name){issues(first:50,after:$endCursor,states:OPEN,labels:[$label],orderBy:{field:CREATED_AT,direction:ASC}){nodes{${ISSUE_FIELDS}} pageInfo{hasNextPage endCursor}}}}`;
@@ -504,10 +507,20 @@ function revisedAt(raw, config) {
 
 const STATE_REASONS = { COMPLETED: 'completed', NOT_PLANNED: 'not_planned', REOPENED: 'reopened', DUPLICATE: 'duplicate' };
 
+/**
+ * A closing pull request in the contract's shape. Its author may edit the body after the merge, so a
+ * merged one whose body changed at or after its merge is no evidence of what the merge closed.
+ */
+function closingPr(pr) {
+  const state = String(pr.state ?? '').toLowerCase();
+  const editedAfterMerge = state === 'merged' && pr.lastEditedAt != null && !(Date.parse(pr.lastEditedAt) < Date.parse(pr.mergedAt ?? ''));
+  return { number: pr.number, state, editedAfterMerge };
+}
+
 /** An issue in the contract's shape; `closing` adds pull requests the platform did not link. */
 export function normalizeIssue(raw, roleOf, config = operatorConfig(), closing = []) {
   const prs = new Map();
-  for (const pr of [...(raw.closedByPullRequestsReferences?.nodes ?? []), ...closing]) prs.set(pr.number, { number: pr.number, state: String(pr.state ?? '').toLowerCase() });
+  for (const pr of [...(raw.closedByPullRequestsReferences?.nodes ?? []), ...closing]) prs.set(pr.number, closingPr(pr));
   return {
     number: raw.number,
     url: raw.url,
@@ -534,17 +547,19 @@ function roles(run) {
   };
 }
 
-/** The most pull requests one closing search reads; more fails the read rather than missing one. */
+/** The most pull requests one closing search reads (the platform's search stops there); more fails the read rather than missing one. */
 export const CLOSING_SEARCH_CAP = 1000;
+const CLOSING_SEARCH = 'query($q:String!,$endCursor:String){search(query:$q,type:ISSUE,first:100,after:$endCursor){nodes{... on PullRequest{number state body url mergedAt lastEditedAt}} pageInfo{hasNextPage endCursor}}}';
 
 /**
  * Every pull request, in any state, whose body closes the issue with a closing keyword. The platform links
  * one only when it targets the default branch, so a pull request merged into another branch is found here.
  */
 export function closingPullRequests(number, run = gh) {
-  const found = JSON.parse(run(['pr', 'list', '--state', 'all', '--search', `${number} in:body`, '--limit', String(CLOSING_SEARCH_CAP), '--json', 'number,state,body,url']));
+  const found = run(['api', 'graphql', '--paginate', '-F', `q=repo:{owner}/{repo} is:pr ${number} in:body`, '-f', `query=${CLOSING_SEARCH}`, '--jq', '.data.search.nodes[] | @json'])
+    .split('\n').filter(Boolean).map((line) => JSON.parse(line));
   if (found.length >= CLOSING_SEARCH_CAP) throw new Error(`${CLOSING_SEARCH_CAP} or more pull requests mention #${number}: the ones that close it cannot all be read`);
-  return found.filter((pr) => closesOf(pr.body, repositoryOf(pr.url)).includes(number)).map((pr) => ({ number: pr.number, state: pr.state }));
+  return found.filter((pr) => closesOf(pr.body, repositoryOf(pr.url)).includes(number));
 }
 
 /**

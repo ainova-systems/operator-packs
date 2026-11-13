@@ -83,8 +83,10 @@ rejected pull request carrying the label takes its close route instead.
 With `operator_config` `issues` set, `forge_cli issue list` gives the queue issues, and one is a candidate
 while `issueCandidates` (`scripts/discovery-contract.mjs`) keeps it: trusted, and closed by no open or merged
 pull request, neither one the platform links nor an open one whose `closes` names it. An open queue issue
-`issueCleanup` keeps - a merged pull request closes it, merged into a branch the platform closes no issue
-from - is never a candidate, but it asks intake all the same, which closes it. An issue that cannot be
+`issueCleanup` keeps - a merged pull request whose body has not changed since the merge closes it, merged
+into a branch the platform closes no issue from - is never a candidate, but it asks intake all the same,
+which closes it. One whose only merged closing pull request was edited after its merge is neither taken nor
+closed: the owner decides. An issue that cannot be
 read fails the discovery run like any other forge read.
 
 Clarification candidates rank by: the queue item field `clarifyFirst: true` first, then the

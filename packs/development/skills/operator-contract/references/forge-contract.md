@@ -35,11 +35,13 @@ platform cannot serve fails with a named capability gap, never an emulation.
 `pr` = `{ number, url, title, body, draft, state: open|merged|closed, head: { ref, sha }, base: { ref },
 mergeable: clean|conflicting|unknown, labels, milestone, createdAt, author, closes }`; `closes` lists the issue
 numbers the body closes with a closing keyword (`Closes #12`, `Closes owner/name#12` or the issue's URL for
-this repository, never another's) outside code and HTML comments, read from the body because a platform may
+this repository on its host, never another's) outside code and HTML comments, read from the body because a platform may
 link them only on its default branch.
 
 `issue` = `{ number, url, title, body, state: open|closed, stateReason, labels, author, authorRole, createdAt,
-revisedAt, trusted, trust, closingPrs: [{ number, state: open|merged|closed }], comments? }`; `revisedAt` is the
+revisedAt, trusted, trust, closingPrs: [{ number, state: open|merged|closed, editedAfterMerge }], comments? }`;
+`editedAfterMerge` says a merged pull request's body changed at or after its merge, so it is no evidence of
+what the merge closed; `revisedAt` is the
 latest of its creation, text edit, title rename, queue-label application, and an owner's or member's comment
 (among the latest 100, added or edited) that is not the pipeline's own, so nobody else's comment changes it;
 `comments` (`issue view` only) = `[{ id, author, authorRole, body, createdAt, url }]`.

@@ -64,4 +64,6 @@ test('a queue issue is a candidate only while trusted and closed by no open or m
   // An open issue a merged pull request closes is never taken again, but it is cleaned up.
   assert.deepEqual(issueCleanup(issues.map((item) => ({ state: 'open', ...item }))).map((item) => item.number), [4]);
   assert.deepEqual(issueCleanup([issue(7, { state: 'closed', closingPrs: [{ number: 34, state: 'merged' }] })]), []);
+  // A body edited at or after the merge is no evidence of what the merge closed.
+  assert.deepEqual(issueCleanup([issue(8, { state: 'open', closingPrs: [{ number: 35, state: 'merged', editedAfterMerge: true }] })]), []);
 });

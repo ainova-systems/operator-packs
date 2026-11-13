@@ -42,11 +42,14 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
 3. **Name the pending work.** Any of: no implementation commits yet (the reservation and the plan
    commit do not count); CI red at the head; actionable findings in the latest `## Code review`
    report at the head; a fix verification sent back (`input.evidence`: a failing `## Verification`
-   report, an owner comment or a QA ticket); owner input newer than the last stage report;
+   report, an owner comment or a QA ticket), or what `operator-product-review` passed on (its report
+   and the owner input given during the review); owner input newer than the last stage report;
    unresolved review threads; plan slices not yet shipped; a conflict with the integration branch;
-   a `## Product review (change) - RETURN` report in this cycle (`operator-contract` > Product
-   review) that no push and no note has answered since - its blockers and concerns, once: fix each,
-   or decline it with its reason in one note.
+   a `## Product review (change) - RETURN` report at the head (`operator-contract` > Product review)
+   with no `<!-- operator:change-review-answered <head> -->` note after it - its blockers and
+   concerns, once: fix each, or decline it with its reason in one note. A push answers the report by
+   moving the head; a round that pushes nothing ends that note with the marker, before the note
+   marker.
    The plan is on the queue item (or profile `flow_plan`'s file); a pull request without a queue item
    keeps it in its body's `## Plan` section, and a handed-off one plans only the remaining work from
    its current head, whose existing commits count as implementation.

@@ -286,9 +286,10 @@ of the steps below exists and every phase runs as before.
 - **The request** is the runtime's `product-review` operation, subject `pr-<n>`, input
   `{ pr, head, mode: plan|change, checkout: <slot root, absolute>, body: <absolute path> }`, with the
   slot clean at the head and the live body written beside it as for the code review
-  (`operator-implement` step 5). Key `product-review:<mode>:<head>`; a change review adds
-  `:b-<body digest>` when profile `operator_discover --body-digest <n>` answers one, and
-  `:retry-<run.jobId>` when `input.reason` is `review` (its chain stopped). A change review waits in
+  (`operator-implement` step 5). Key `product-review:plan:<head>`, or
+  `product-review:change:<head>:c-<id of the report that opened the cycle, or none>`, ending
+  `:retry-<run.jobId>` when `input.reason` is `review` (its chain stopped), so each cycle reviews
+  its head once. A change review waits in
   `codeReview` (moved there in the hand-off edit, or already there), so a chain that stops is asked
   again like a code review's (`references/discovery-contract.md`, row 11a); a plan review waits in
   `development`.
@@ -300,7 +301,9 @@ of the steps below exists and every phase runs as before.
   `operator-plan` revises the plan or declines each finding with its reason and hands on without a
   second plan review; a change `RETURN` sends it to `development`, where `operator-implement` fixes or
   declines each finding once, and its next finished head moves to verification without a second
-  change review.
+  change review. A `RETURN` at the head is answered once a push moves the head, or a note after it
+  carries `<!-- operator:plan-review-answered <head> -->` (or `change-review-answered`) before the
+  note marker.
 - **The label** (`operator_config` `labels.approved`, default `ai:approved`) follows the newest
   change report: `APPROVE` adds it, `RETURN` removes it. It is no success factor and no merge
   condition, and it is written only beside another `ai:*` label that stays once the claim is dropped,

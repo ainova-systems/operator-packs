@@ -25,23 +25,32 @@ run records its verdict without judging again. It is the `product-review-verdict
    `head`. Anything else ends `noop`: a moved head is judged when its own phase asks.
 2. **Claim the PR in its slot**, which stands on the PR branch at that head once reconciled
    (`operator-contract` > The slot stays with its pull request).
-3. **Record.** The findings file holds `mode`, `verdict` and `report`, the complete comment. Post
-   `report` unchanged. A report whose first line is not `## Product review (<input.mode>) - <verdict>`,
-   whose next line does not start `head: <input.head>`, or whose verdict the mode does not allow
-   (`PROCEED` or `RETURN` for a plan, `APPROVE` or `RETURN` for a change) ends `failed`. A change
-   verdict sets the `approved` label (`operator_config` `labels.approved`, default `ai:approved`):
-   `APPROVE` adds it when another `ai:*` label stays once the claim is dropped, `RETURN` removes it
-   when it stands. A plan verdict writes no label, and no verdict writes a success factor.
-4. **Hand the PR on** in one edit that drops `ai:processing`, and end `done` with the hand-off
-   request (`operator-contract`):
+3. **Record.** The findings file holds `mode`, `verdict` and `report`, the complete comment. A
+   report whose first line is not `## Product review (<input.mode>) - <verdict>`, whose next line
+   does not start `head: <input.head>`, or whose verdict the mode does not allow (`PROCEED` or
+   `RETURN` for a plan, `APPROVE` or `RETURN` for a change) ends `failed`. First read the owner input
+   (profile `operator_discover --owner-input <n>`): the report becomes its cutoff, so what it lists
+   now - input given while the review ran - travels with the hand-off (step 4). Then post `report`
+   unchanged, unless a report for this head and mode already stands in this cycle (a plan's: at
+   this head) - this verdict's own, from an earlier attempt. A change verdict then sets the
+   `approved` label (`operator_config` `labels.approved`, default `ai:approved`), on a retry that
+   posted nothing too: `APPROVE` adds it when another `ai:*` label stays once the claim is
+   dropped, `RETURN` removes it when it stands. A plan verdict writes no label, and no verdict writes
+   a success factor.
+4. **Hand the PR on** in one edit that drops `ai:processing`, and end `done`:
    - plan `PROCEED`: it stays in development, where `operator-implement` starts;
    - plan `RETURN`: to the queue milestone, where `operator-plan` answers the report;
    - change `APPROVE`: to the verification milestone when no review thread is unresolved (profile
-     `forge_cli threads <n> --unresolved`) and no owner input follows the report (profile
-     `operator_discover --owner-input <n>`): the head is finished and `operator-verify` waits for CI
-     and QA; otherwise to development, where `operator-implement` handles them and moves the head on
-     without a second change review;
+     `forge_cli threads <n> --unresolved`) and step 3 found no owner input: the head is finished and
+     `operator-verify` waits for CI and QA. Otherwise to development, where `operator-implement`
+     handles them and moves the head on without a second change review;
    - change `RETURN`: to development, where `operator-implement` fixes or declines each finding once.
+
+   A move to verification, or a plan `PROCEED` with no owner input, ends with the hand-off request
+   (`operator-contract`). Every other route carries `evidence` - the report's URL and each owner
+   input's URL from step 3 - in its own request, because the input already sits behind the report's
+   cutoff where discovery would not pass it: `plan` keyed `plan:<head>:return-<report id>`, or
+   `implement` keyed `implement:<head>:product-<report id>`.
 5. **Remove the body file** (`input.body`) once the report is posted or the run ends `noop`; the slot
    stays on the PR branch (`operator-contract`).
 
@@ -52,10 +61,12 @@ the change, post its report, and act on a `RETURN` once as `operator-contract` >
 
 ## Verify
 
-- The `## Product review` comment names the head and the mode it judged.
+- The `## Product review` comment names the head and the mode it judged, once per head, mode and
+  cycle.
 - The `approved` label stands exactly when the newest change report is `APPROVE`, beside another
   `ai:*` label.
-- The pull request sits where step 4 sends it, with no claim left on it.
+- The pull request sits where step 4 sends it, with no claim left on it, and owner input given
+  during the review went with it as evidence.
 
 ## Scope / hand-off
 
@@ -64,7 +75,6 @@ the change, post its report, and act on a `RETURN` once as `operator-contract` >
 
 ## Constraints
 
-- One report per head and mode: a report for this head and mode already standing posts nothing
-  again, and a pull request still in step 1's milestone goes straight to step 4, so a retry after a
-  failed move finishes it.
+- A retry after a partly recorded verdict posts no second report but still sets the label and
+  finishes step 4.
 - No judgment of its own and no fixes here.

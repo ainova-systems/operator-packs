@@ -119,7 +119,7 @@ puts it in `input.qa` (`passed`, `pending`, `failed`, `none`), and asks for rows
 | `staleClaim` | job id | discovery, stale claims | every phase skill (takeover) |
 | `step` | `select\|clarify\|revise\|close\|merge` | discovery, clarification | clarify |
 | `candidates` | `[path]` | discovery, `clarify-queue` | clarify |
-| `evidence` | URL | `operator-verify`'s route back to development | implement |
+| `evidence` | URL, or a list of URLs | `operator-verify`'s route back to development; `operator-product-review`'s routes back, with the report and the owner input given during the review | implement, plan |
 | `checkout` | absolute path | `operator-implement`'s `review` request; a `product-review` request | the review jobs and their verdicts |
 | `body` | absolute path | `operator-implement`'s `review` request; a `product-review` request: the PR body for the review to read | the verdicts (which remove it) |
 | `mode` | `plan\|change` | a `product-review` request | the product review job, product-review-verdict |

@@ -23,12 +23,15 @@ Plan captures the intended result before any implementation; it is the `plan` op
 2. **Claim and check out** the PR branch at its live head, reconciling the slot first
    (`operator-contract` > The slot stays with its pull request). Read the linked queue item, its feature
    documentation and any plan commits; reuse a completed capture on retry. The intake reservation is
-   not a planning commit. A `## Product review (plan) - RETURN` report at the live head that no note
-   has answered since (`operator-contract` > Product review) makes this run its answer, once: verify
+   not a planning commit. When the newest `## Product review (plan)` report is a `RETURN` with no
+   `<!-- operator:plan-review-answered <head> -->` note after it (`operator-contract` > Product
+   review; `input.evidence` names it, with any owner input given during the review), this run is
+   its answer, once: verify
    each blocker and concern in the repository, then revise the plan (steps 4 and 5) or decline the
    finding with its reason in the plan's deviations; post one note listing each finding as `revised`
    or `declined: <reason>`, with `<!-- operator:plan-review-answered <head> -->` (the head after the
    plan's push) before the note marker; and hand off at step 6 without asking another plan review.
+   A retry that finds that note already posted goes straight to step 6.
 3. **Capture the outcome.** Run only the capture of profile `flow_intake` against the item and the repository,
    answering from them what they already settle. Capture the business goal, observable acceptance
    criteria and scope exclusions. Address every recorded rejection reason. Validate the proposed
@@ -55,8 +58,8 @@ Plan captures the intended result before any implementation; it is the `plan` op
    profile `commit_skill`; an identical capture already published is reused, never committed empty.
 6. **Hand off.** All in-scope questions settled → re-check live state, then one call moves the PR
    to the development milestone and drops `ai:processing`. Result `done` with the hand-off request
-   (`operator-contract`). When profile `product_review_skill` is set and this run did not answer a
-   plan review, the result asks for the plan review instead (`operator-contract` > Product review):
+   (`operator-contract`). When profile `product_review_skill` is set and the newest plan report is
+   not a `RETURN` that an answer note follows (step 2), the result asks for the plan review instead (`operator-contract` > Product review):
    the slot clean at the head and the live body written beside it, as `operator-implement` step 5
    leaves them for a review.
 

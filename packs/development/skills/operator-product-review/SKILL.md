@@ -13,7 +13,7 @@ run records its verdict without judging again. It is the `product-review-verdict
 | Contract | |
 |---|---|
 | Trigger | The runtime's `product-review` job finished; `input.output` is its findings file at `input.head` |
-| Work | post the report unchanged; `ai:approved` on `APPROVE`, cleared on `RETURN` |
+| Work | post the report unchanged; `ai:approved` (`labels.approved`) on `APPROVE`, cleared on `RETURN` |
 | Evidence | the `## Product review (change) - …` comment at `head:` |
 | Next | `APPROVE` → verification (from `codeReview`), or where it stands; `RETURN` → development, queue or an owner question, by its route |
 
@@ -29,16 +29,18 @@ run records its verdict without judging again. It is the `product-review-verdict
    comment. A report whose first line is not `## Product review (change) - <verdict>` (`APPROVE` or
    `RETURN`), whose next line does not start `head: <input.head>`, or a `RETURN` without a route
    (`development`, `plan` or `owner`, the last with its question) ends `failed`. First read the owner
-   input (profile `operator_discover --owner-input <n>`): the report becomes its cutoff, so what it
-   lists now - input given while the review ran - goes on with step 4. Then post `report` unchanged,
-   unless the newest product report already is this one, from an earlier attempt of this run. Write
-   the factor (profile `forge_cli factor set|clear <n> --name ai:approved`) on every attempt:
-   `APPROVE` sets it, `RETURN` clears it.
+   input (profile `operator_discover --owner-input <n>`) and keep it in a file beside `input.output`:
+   the report becomes its cutoff, so what it lists now - input given while the review ran - goes on
+   with step 4, and an attempt after the report was posted reads that file instead. Then post
+   `report` unchanged, unless the newest product report already is this one, from an earlier attempt
+   of this run. Write the factor `operator_config` `labels.approved` names (default `ai:approved`;
+   profile `forge_cli factor set|clear <n> --name <it>`) on every attempt: `APPROVE` sets it,
+   `RETURN` clears it.
 4. **Route** in one edit that drops `ai:processing`, and end `done` (`needs-input` for the owner):
-   - `APPROVE` from `codeReview`: to the verification milestone with the hand-off request
-     (`operator-contract`) when no review thread is unresolved (profile `forge_cli threads <n>
-     --unresolved`) and step 3 found no owner input; otherwise to development, where
-     `operator-implement` handles them. From a later milestone the pull request stays where it is.
+   - `APPROVE` with no review thread unresolved (profile `forge_cli threads <n> --unresolved`) and no
+     owner input from step 3: from `codeReview` to the verification milestone with the hand-off
+     request (`operator-contract`); from a later milestone it stays where it is. Otherwise to
+     development, where `operator-implement` handles them.
    - `RETURN` to `development`: to the development milestone, asking `implement`;
    - `RETURN` to `plan`: to the queue milestone, asking `plan`;
    - `RETURN` to `owner`: to the development milestone, asking `owner_question` as

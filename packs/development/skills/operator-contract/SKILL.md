@@ -272,8 +272,8 @@ The runtime's review job writes its findings file (`input.output`) as JSON:
 ## Product review
 
 A project whose profile `product_review_skill` names a skill has every finished change judged as
-product before verification, and declares `ai:approved` in profile `pr_success_factors`: the success
-factor that review earns, gating `ai:completed` and the merge like the others. Unset (`none`), none of
+product before verification, and declares `ai:approved` (`operator_config` `labels.approved`) in
+profile `pr_success_factors`: the success factor that review earns, gating `ai:completed` and the merge like the others. Unset (`none`), none of
 the steps below exists and every phase runs as before.
 
 - **When.** A head whose plan is complete, whose code review has no Critical finding and whose

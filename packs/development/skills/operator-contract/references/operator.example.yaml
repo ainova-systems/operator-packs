@@ -51,6 +51,26 @@ workflows:
           Answer only with the JSON your output schema requires.
         then: review-verdict
       review-verdict: { kind: agent, engine: claude, skill: operator-review,    model: sonnet, pool: development-slot, timeout: 30m, retries: 2, retryDelay: 30m, args: ['--permission-mode', auto, '--effort', low] }
+      # With profile product_review_skill set, the product review (operator-contract > Product review):
+      # read-only in another engine than the one that wrote the solution, in the pull request's slot.
+      # product-review:
+      #   kind: agent
+      #   engine: codex
+      #   agent: '<the product reviewer agent>'
+      #   schema: '<the JSON Schema of the findings file operator-contract > Product review defines>'
+      #   pool: development-slot
+      #   access: read
+      #   timeout: 45m
+      #   retries: 4
+      #   retryDelay: 30m
+      #   prompt: >-
+      #     Run the <product_review_skill> skill on the change of pull request {subject}, read-only,
+      #     with the input file {input}: its checkout (else this slot) is the location under judgement
+      #     and its body (else the live one) the pull request body. Post nothing; the complete report
+      #     comment goes in "report".
+      #     Answer only with the JSON your output schema requires.
+      #   then: product-review-verdict
+      # product-review-verdict: { kind: agent, engine: claude, skill: operator-product-review, model: sonnet, pool: development-slot, timeout: 30m, retries: 2, retryDelay: 30m, args: ['--permission-mode', auto, '--effort', low] }
       verify:         { kind: agent, engine: claude, skill: operator-verify,    model: sonnet, pool: development-slot, timeout: 2h,  retries: 2, retryDelay: 30m, notify: [done, needs-input, failed], args: ['--permission-mode', auto, '--effort', high] }
       merge:          { kind: agent, engine: claude, skill: operator-merge,     model: sonnet, pool: development-slot, timeout: 30m, retries: 2, retryDelay: 30m, args: ['--permission-mode', auto, '--effort', high] }
       # clarify:      { kind: agent, engine: claude, skill: operator-clarify,   model: opus,   pool: clarify-slot,     timeout: 3h,  retries: 2, retryDelay: 30m, notify: [needs-input, failed], args: ['--permission-mode', auto, '--effort', high] }

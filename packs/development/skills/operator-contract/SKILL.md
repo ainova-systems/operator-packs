@@ -37,6 +37,7 @@ only through profile `forge_cli`.
 | `outcome_skill` | `git-complete-pr` | the pull request and the outcome the phase reached | `ai:completed`, `ai:manual` or `ai:failed`, removing `ai:processing` in the same edit; a `## Outcome - MANUAL` / `## Outcome - FAILED` report with its `head:` line for the last two | write exactly one terminal label |
 | `merge_skill` | `git-merge-pr` | an accept-ready pull request | the merge; no label | refuse unless every required check is green on it, no review thread is unresolved, the pull request is mergeable, the state label is `ai:completed` (or there is no `ai:*` label) and every declared factor is fresh at head; then merge by profile `merge_method`, confirm the pull request reads merged and report the merge commit |
 | `sync_base_skill` | `git-to-base` | the slot, optionally one branch | nothing on the PR | return the slot to the integration branch, fast-forward it, and remove only local branches whose pull request merged (or the named closed one) |
+| `product_review_skill` | `none`: no product review (*Product review*) | the pull request's request, plan and diff at one head, and its body | nothing itself: one `## Product review (change) - <VERDICT>` report, `head: <sha> - body: <digest>`, and the route of a `RETURN`, which `operator-product-review` posts; `ai:approved` | judge read-only whether the change is the right product for its users: `APPROVE`, or `RETURN` only when a blocker or concern stands with its evidence, naming where it goes back - `development`, `plan`, or `owner` with the one question to ask |
 
 Profile `flow_implement` is the implementation itself: `auto` resolves as core does (the project's
 own execution skill when one is installed, else one subagent working to the plan's slices); a skill
@@ -52,7 +53,8 @@ The prompt names the input file and the result path; the same paths are in `$OPE
   for intake and clarification (absent when run by hand: the checkout's own name gives it);
 - `subject` — `pr-<n>`, `queue` for intake, or `clarify-queue` for selecting an item to clarify;
 - `input` — pointers only: `pr`, `head`, `ci`, `milestone`; a review gets `checkout` (the slot it
-  judges), `body` (a file holding the PR body) and `final`, and its verdict also `output` (the findings file);
+  judges), `body` (a file holding the PR body) and `final` (not for the product review), and its
+  verdict also `output` (the findings file);
   a fix sent back by verification gets `evidence`; a resumed question gets `question` and `reply` (a
   comment URL). Every field, its type and its producer: `references/discovery-contract.md` > The input;
 - `trigger` — what started the job (`kind` is `timer`, `next`, `resume` or `manual`).
@@ -113,7 +115,8 @@ A pull request's milestone names the phase that may take it. Skills name the mil
 their role in `operator_config` `milestones` - `queue`, `development`, `codeReview`,
 `verification`, `humanReview`, `mergeQueue`, and `clarification` for a clarification slot's pull request - and read the project's title for each role there before comparing or
 setting one; a title is never written into a skill. `codeReview` holds a pull request while the
-runtime reviews its head and `operator-review` posts the verdict, and a finished head waits for CI in
+runtime reviews its head and `operator-review` posts the verdict (and the product review of a finished
+head, which `operator-product-review` posts, *Product review*), and a finished head waits for CI in
 `verification`; a pull request in `development` without `ai:processing` waits between two runs, or
 for CI after a clean review of an unfinished head. A conflict with the integration branch returns a
 pull request in any later milestone to `development`; a `sendBack` label from `operator_config`
@@ -211,7 +214,8 @@ the label that stands.
    end `needs-input` with
    `"wait": { "on": "answer", "subject": "pr-<n>", "key": "<run.id>:<n>", "resume": "<this operation>", "input": { "pr": <n>, "head": "<head now>", "milestone": "<milestone now>" } }`,
    with the head as it stands after any push this run made: the resumed run gets that `input`, not
-   the original one. No process waits, and the slot stays with the pull request.
+   the original one. `operator-product-review` does no work of its own, so its question resumes
+   `implement`, in the development milestone. No process waits, and the slot stays with the pull request.
 3. Discovery resumes the operation when the owner replies. The resumed run gets the wait's
    `input` plus `question` and `reply`: read that comment, check it answers *that* question for the
    current head, and record the answer with `operator state put answers pr-<n>.<question> < answer.json`
@@ -265,6 +269,38 @@ The runtime's review job writes its findings file (`input.output`) as JSON:
 | `findings` | `[{ severity: critical\|major\|minor, file, line (0 = whole file), rule, sibling, summary }]` (`rule`, `sibling` may be empty) |
 | `report` | the complete `## Code review - <VERDICT>` comment, posted unchanged |
 
+## Product review
+
+A project whose profile `product_review_skill` names a skill has every finished change judged as
+product before verification, and declares `ai:approved` (`operator_config` `labels.approved`) in
+profile `pr_success_factors`: the success factor that review earns, gating `ai:completed` and the merge like the others. Unset (`none`), none of
+the steps below exists and every phase runs as before.
+
+- **When.** A head whose plan is complete, whose code review has no Critical finding and whose
+  `ai:approved` is not fresh goes to the product review before verification: `operator-review` asks
+  for it after a `CLEAN` review of a `final` head, `operator-implement` at step 6. The pull request
+  waits in `codeReview`, so a chain that stops is asked again like a code review's
+  (`references/discovery-contract.md`, row 11a). Discovery asks for it directly for a pull request in
+  `humanReview` or `mergeQueue` without a fresh `ai:approved` (row 8a), so no head merges unjudged.
+- **The request** is the runtime's `product-review` operation, subject `pr-<n>`, input
+  `{ pr, head, checkout: <slot root, absolute>, body: <absolute path> }`, with the slot clean at the
+  head and the live body written beside it as for the code review (`operator-implement` step 5); a
+  request from discovery carries neither, and the review reads the slot it runs in and the live body.
+  Key `product-review:<head>:<body digest, or none>:<newest owner input id, or none>`, ending
+  `:retry-<run.jobId>` when `input.reason` is `review` (its chain stopped): one review per head,
+  body and owner input.
+- **The verdict.** The runtime runs profile `product_review_skill` read-only, in another engine than
+  the one that wrote the change, and chains `product-review-verdict`: `operator-product-review`
+  posts the report unchanged and routes the pull request. Its findings file holds `head`, `verdict`,
+  `route` (`none` for `APPROVE`; `development`, `plan` or `owner` for `RETURN`), `owner_question`,
+  `findings` and `report`, the complete comment.
+- **`APPROVE`** earns `ai:approved`, and the head continues to verification.
+- **`RETURN`** clears `ai:approved` and sends the pull request back by its route: to development,
+  where `operator-implement` fixes each finding; to the queue, where `operator-plan` revises the plan
+  the findings show wrong; or to the owner, when a finding needs a decision only they can make
+  (*Asking the owner*, resumed by `implement`). Like a code review, the next finished head is reviewed
+  again; the same head is reviewed again only after the owner has spoken.
+
 ## State
 
 `operator state` and `operator jobs` exist only under the runtime; a run by hand uses neither.
@@ -298,7 +334,8 @@ that skill (`/operator-plan <n>`).
 ## Scope / hand-off
 
 - The phase skills (`operator-intake`, `operator-plan`, `operator-implement`, `operator-review`,
-  `operator-verify`, `operator-merge`, `operator-clarify`) load this contract first; the code
+  `operator-product-review`, `operator-verify`, `operator-merge`, `operator-clarify`) load this
+  contract first; the code
   host is reached only through profile `forge_cli` (on GitHub, this skill's `scripts/forge-github.mjs`).
 
 ## Constraints

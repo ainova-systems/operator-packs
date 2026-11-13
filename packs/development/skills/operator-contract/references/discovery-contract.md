@@ -45,10 +45,11 @@ already covers is skipped.
 | 6 | in `humanReview`/`mergeQueue` and the steps digest differs from the last passing verification's, or the body digest from the last passing review's (verify then returns the stale review to development) | `verify` | `steps:<head>:s-<digest>`, `body:<head>:b-<digest>` |
 | 7 | in `humanReview`/`mergeQueue` and the head is not the one the last verification judged | `verify` | `moved:<head>` |
 | 8 | owner QA feedback (owner input or a QA ticket) newer than the last stage report, in `humanReview`/`mergeQueue` | `verify` | `feedback:<head>:…` |
+| 8a | in `humanReview`/`mergeQueue`, profile `pr_success_factors` declares `labels.approved` and it is not fresh: the label missing, or the newest `## Product review (change)` report not an `APPROVE` naming this head and body | `product-review` | `product-review:<head>:<body digest>:<owner input>` |
 | 9 | `accepted`, in `humanReview`/`mergeQueue` | `merge` | `merge:<head>:…` |
 | 10 | `queue` | `plan` | `plan:<head>:<owner input>` |
 | 11 | `development`; skip while CI runs after a `CLEAN` review of this head with no newer owner input and no unresolved thread, and while `ai:manual` or `ai:failed` stands with no owner input after its `## Outcome` report (waiting for the owner) | `implement` | `implement:<head>:<ci>:<owner input>:<latest stage report id>` |
-| 11a | `codeReview` (a job covering it is skipped above, so the review chain stopped) | `implement`, `reason: review` | `review-lost:<head>:<ci>:<owner input>:<latest stage report id>` |
+| 11a | `codeReview` (a job covering it is skipped above, so the review chain stopped - the code review's or the product review's) | `implement`, `reason: review` | `review-lost:<head>:<ci>:<owner input>:<latest stage report id>` |
 | 12 | `verification`, draft: only the oldest draft, only while fewer than `readyLimit` PRs are ready | `verify` (it promotes) | `admit:<head>:<ready count>` |
 | 13 | `verification`, ready: skip while CI runs and QA does not serve this head yet | `verify` | `verify:<head>:<ci>:qa-<state>:…` |
 | 14 | `humanReview` or `mergeQueue` otherwise | skip (waiting for the owner) | - |
@@ -58,7 +59,10 @@ A pull request in a clarification slot routes instead: `clarification` → `clar
 report at the head or `accepted`, with CI decided → `clarify` (step `merge`).
 
 Not discovery's: `review` is requested by `operator-implement`'s result; `review-verdict` by the
-review job's result (the manifest chains it); an owner answer resumes the asking operation.
+review job's result (the manifest chains it); `product-review`, besides row 8a, by `operator-review`'s
+or `operator-implement`'s result (`operator-contract` > Product review); `product-review-verdict` by
+the product review job's result; an owner answer resumes the asking operation. A product review
+report is a stage report like any other: it moves row 11's key and the owner-input cutoff.
 
 ## Queues
 
@@ -116,11 +120,11 @@ puts it in `input.qa` (`passed`, `pending`, `failed`, `none`), and asks for rows
 | `staleClaim` | job id | discovery, stale claims | every phase skill (takeover) |
 | `step` | `select\|clarify\|revise\|close\|merge` | discovery, clarification | clarify |
 | `candidates` | `[path]` | discovery, `clarify-queue` | clarify |
-| `evidence` | URL | `operator-verify`'s route back to development | implement |
-| `checkout` | absolute path | `operator-implement`'s `review` request | the review job, review-verdict |
-| `body` | absolute path | `operator-implement`'s `review` request: the PR body for the review to read | review-verdict (removes it) |
+| `evidence` | URL, or a list of URLs | `operator-verify`'s route back to development; `operator-product-review`'s routes back, with the report and the owner input given during the review | implement, plan |
+| `checkout` | absolute path | `operator-implement`'s `review` request; a `product-review` request a phase skill makes | the review jobs and their verdicts |
+| `body` | absolute path | `operator-implement`'s `review` request; a `product-review` request a phase skill makes: the PR body for the review to read | the verdicts (which remove it) |
 | `final` | boolean | `operator-implement`'s `review` request: only review and CI stand between the head and verification | review-verdict |
-| `output` | absolute path | the review job: the findings file | review-verdict |
+| `output` | absolute path | the review job or the product review job: the findings file | review-verdict, product-review-verdict |
 | `question`, `reply` | id, URL | the runtime, resuming a wait | the asking skill |
 | `member` | slot name | the runtime, from the request's `member` (discovery sets it there, not in `input`) | intake, clarify, every slot-bound skill |
 

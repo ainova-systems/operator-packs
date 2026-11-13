@@ -11,7 +11,7 @@ Plan captures the intended result before any implementation; it is the `plan` op
 
 | Contract | |
 |---|---|
-| Trigger | A PR in the queue milestone, including a resumed planning question |
+| Trigger | A PR in the queue milestone, including a resumed planning question or a plan the product review sent back |
 | Work | Profile `flow_intake`, capture only (`operator-contract` > Delegated steps); the plan on the queue item, or profile `flow_plan` for feature-sized work; the PR's verification section; profile `commit_skill` (default `git-commit-push`) |
 | Evidence | plan commit SHA, queue item path and PR URL |
 | Next | complete → development milestone, `implement`; open question → `needs-input`, resume `plan` |
@@ -34,7 +34,9 @@ Plan captures the intended result before any implementation; it is the `plan` op
    description, the queue items and feedback it links, and the owner's comments and answers: audit
    the existing diff against them, capture the acceptance criteria for the whole scope, and plan the
    remaining gaps and adjustments, which implementation continues from the current head. Only what
-   is still genuinely open goes to the owner. With no linked queue item and no feature-sized plan,
+   is still genuinely open goes to the owner. A pull request the product review sent back
+   (`input.evidence`, `operator-product-review`) is planned again the same way, and the revised plan
+   answers each of its findings. With no linked queue item and no feature-sized plan,
    the plan goes in the pull request body under a `## Plan` heading instead of a commit; a rerun
    replaces that section, never appends to it.
 4. **Write the plan** on the queue item: capture, decisions, deviations and testable slices, each

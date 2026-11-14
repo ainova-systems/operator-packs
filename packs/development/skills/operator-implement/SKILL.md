@@ -67,6 +67,12 @@ round runs, the claim, the hand-off to review and the move to `verification`. Lo
    profile `commit_skill`, with no pre-commit review pass and no CI wait, which belong to this phase.
    Reply to and resolve review threads through profile `threads_skill`. An owner
    decision is a question with `resume: implement`.
+   A review finding, a review thread or a product review blocker names one instance of its defect,
+   not all of them: the round searches the repository for every other place where this change
+   leaves the same defect - each restatement of a definition the change altered, each caller of a
+   contract it corrected, each sibling of code it wrote - and fixes them in the same round, so the
+   next review does not find the next one. A defect that exists without this change stays out of
+   scope.
    Bring the integration branch in first (profile `update_strategy`, conflicts through profile
    `conflict_skill`) when the round will push anyway or the PR conflicts with it; never merge it
    in only because it moved, which restarts CI and the review with nothing else to judge.
@@ -132,6 +138,8 @@ coming, so step 5 leaves the PR in development, and step 1 takes a PR in `codeRe
   every declared factor but `ai:verified` fresh and CI green on that head - with profile
   `product_review_skill` set, `ai:approved` among them.
 - No round ran past the budget; a spent one left an `## Outcome` report naming it.
+- A round that answered a finding also fixed the other places where the change left the same
+  defect, and its commit or thread reply names them.
 
 ## Scope / hand-off
 

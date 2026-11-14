@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] - 2026-11-14
+
+### Fixed
+
+- `operator-implement` now fixes every place where the change leaves the same defect as a review finding, a review thread or a product review blocker, not only the lines it names: each restatement of a definition the change altered, each caller of a contract it corrected, each sibling of code it wrote. A defect that exists without the change stays out of scope.
+- Why: a reviewer names one instance of a defect. A round that fixed only that instance met the next one in the following review, one round each time.
+
+**Updating:** nothing to configure. Branches started before the update keep the skills they started with.
+
 ## [0.20.0] - 2026-11-13
 
 A labelled issue can be a queue item: the pipeline takes it, reports on it, and closes it when the work merges.

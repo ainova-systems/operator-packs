@@ -40,6 +40,7 @@ description: Project profile keys the operator packs' skills read, with their de
 - merge_skill: none                  <!-- the merge behind its guards; none = git-merge-pr -->
 - sync_base_skill: none              <!-- return a slot to the integration branch; none = git-to-base (core 0.17.0 on; with an earlier core set git-sync-base) -->
 - product_review_skill: none         <!-- the product review of a finished change before verification, run read-only by the runtime's product-review operation and posted by operator-product-review, which writes ai:approved; set it together with ai:approved in pr_success_factors (operator-contract > Product review); none = no product review stage -->
+- ux_review_skill: none              <!-- the UX review of the screens a change renders differently, run by operator-verify through judge_runner once the QA deployment serves the head, which writes ai:ux-approved; set it together with ai:ux-approved in pr_success_factors (operator-contract > UX review); none = no UX review -->
 
 ## Shared with core
 

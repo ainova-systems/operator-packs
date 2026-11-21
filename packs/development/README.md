@@ -34,7 +34,7 @@ queue item in one session instead of phase by phase.
 | `operator-implement` | `development` (Development) | a pushed head goes to review; the plan is complete, the head is reviewed and CI is green |
 | `operator-review` | `codeReview` (Code Review) | the runtime's review is posted: findings return it to Development, a clean review of a finished head sends it to Verification (runtime only) |
 | `operator-product-review` | `codeReview` (Code Review), or a later milestone discovery found unapproved | with profile `product_review_skill` set, the runtime's product review is posted: `APPROVE` writes `ai:approved` and the head goes on to Verification; `RETURN` sends it back to Development, In Queue or the owner (runtime only) |
-| `operator-verify` | `verification` (Verification) | profile `verify_skill` passed and profile `outcome_skill` wrote `ai:completed` |
+| `operator-verify` | `verification` (Verification), or a later milestone discovery found without a fresh UX review | profile `verify_skill` passed, profile `ux_review_skill` approved when it is set, and profile `outcome_skill` wrote `ai:completed` |
 | - (the owner) | `humanReview` (Human Review) | feedback returns it to Verification; `owner:accepted` sends it to merge |
 | `operator-merge` | `mergeQueue` (Merge Queue) | merged |
 
@@ -86,7 +86,10 @@ sequenceDiagram
 
     RT->>C: operator-verify
     C->>J: verify_skill on QA (judge_runner)
-    C->>GH: report, ai:verified, ai:completed, Human Review
+    opt ux_review_skill set
+        C->>J: UX review of the changed screens on QA (judge_runner)
+    end
+    C->>GH: reports, ai:verified, ai:ux-approved, ai:completed, Human Review
 
     Owner->>GH: QA
     alt a comment or a QA ticket

@@ -38,6 +38,7 @@ only through profile `forge_cli`.
 | `merge_skill` | `git-merge-pr` | an accept-ready pull request | the merge; no label | refuse unless every required check is green on it, no review thread is unresolved, the pull request is mergeable, the state label is `ai:completed` (or there is no `ai:*` label) and every declared factor is fresh at head; then merge by profile `merge_method`, confirm the pull request reads merged and report the merge commit |
 | `sync_base_skill` | `git-to-base` | the slot, optionally one branch | nothing on the PR | return the slot to the integration branch, fast-forward it, and remove only local branches whose pull request merged (or the named closed one) |
 | `product_review_skill` | `none`: no product review (*Product review*) | the pull request's request, plan and diff at one head, and its body | nothing itself: one `## Product review (change) - <VERDICT>` report, `head: <sha> - body: <digest>`, and the route of a `RETURN`, which `operator-product-review` posts; `ai:approved` | judge read-only whether the change is the right product for its users: `APPROVE`, or `RETURN` only when a blocker or concern stands with its evidence, naming where it goes back - `development`, `plan`, or `owner` with the one question to ask |
+| `ux_review_skill` | `none`: no UX review (*UX review*) | the pull request at one head, its diff and the QA deployment serving that head | nothing itself: one `## UX review - <VERDICT>` report naming the head, which `operator-verify` posts; `ai:ux-approved` | judge the screens the change renders differently, on the running deployment, against their closest shipped sibling and their look before the change: `APPROVE`, or `RETURN` only for a departure the change introduced, each finding citing the change and the capture, naming where it goes back - `development`, or `owner` with the one question to ask |
 
 Profile `flow_implement` is the implementation itself: `auto` resolves as core does (the project's
 own execution skill when one is installed, else one subagent working to the plan's slices); a skill
@@ -304,6 +305,30 @@ the steps below exists and every phase runs as before.
   the findings show wrong; or to the owner, when a finding needs a decision only they can make
   (*Asking the owner*, resumed by `implement`). Like a code review, the next finished head is reviewed
   again; the same head is reviewed again only after the owner has spoken.
+
+## UX review
+
+A project whose profile `ux_review_skill` names a skill has the screens every change renders
+differently judged on its running deployment, and declares `ai:ux-approved` (`operator_config`
+`labels.uxApproved`) in profile `pr_success_factors`, gating `ai:completed` and the merge like the
+others. Unset (`none`), none of the steps below exists and every phase runs as before.
+
+- **When.** In verification, once the QA deployment serves the head: `operator-verify` runs it after
+  the verification of the same head passes. The product review judges the diff before any deployment
+  exists; this review judges what the deployment renders. Discovery asks `verify` for a pull request
+  in `humanReview` or `mergeQueue` without a fresh `ai:ux-approved` (row 8b), so no head merges
+  unjudged.
+- **The verdict.** `operator-verify` runs profile `ux_review_skill` through profile `judge_runner`
+  like profile `verify_skill`, with the checkout and the deployment held still, and posts its
+  `## UX review - APPROVE|RETURN` report unchanged, the second line `head: <sha>`. A change that
+  renders no screen differently is an `APPROVE` saying so.
+- **`APPROVE`** earns `ai:ux-approved`. **`RETURN`** clears it and routes like a failed verification:
+  to development for each finding, or to the owner when only a new design decision would settle one
+  (*Asking the owner*, resumed by `verify`). A finding concerns only what the change renders
+  differently: a defect the screen had before the change is recorded where the project records
+  defects, never a reason to return the change.
+- **Freshness.** The newest `## UX review` report is an `APPROVE` naming the head. A reset of the
+  deployment or a return to draft makes it stale, as it does `ai:verified`.
 
 ## State
 

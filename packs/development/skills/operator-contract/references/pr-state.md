@@ -52,6 +52,7 @@ Additive, each written by the stage that judged it and never by the actor that d
 | `ai:reviewed` | the diff passed review against the rules and against what the pull request claims (profile `review_skill`) |
 | `ai:verified` | the pull request's declared verification steps were executed against the running change and passed (profile `verify_skill`) |
 | `ai:approved` | the change was judged the right product for its users (profile `product_review_skill`, `operator-contract` > Product review); a factor only when `pr_success_factors` declares it |
+| `ai:ux-approved` | the screens the change renders differently were judged on its running deployment against their sibling and their earlier look (profile `ux_review_skill`, `operator-contract` > UX review); a factor only when `pr_success_factors` declares it |
 
 Profile `pr_success_factors` declares the set a pull request must carry (default: the first two); a project
 may add factors that other agents or pipelines apply.
@@ -59,7 +60,8 @@ may add factors that other agents or pipelines apply.
 A factor is a claim about one commit. It counts only while fresh: the report that earned it names
 the current head, and every other input it judged is unchanged - a verification names the digest of
 the steps it executed (`discovery-contract.md` > The steps digest), a review the digest of the body
-whose claims it judged (`discovery-contract.md` > The body digest), and so does a product review. For a factor no operator stage
+whose claims it judged (`discovery-contract.md` > The body digest), and so does a product review; a
+UX review, like a verification, is also stale once the deployment it judged is reset. For a factor no operator stage
 writes, the label was applied after the head commit landed. A push makes every factor stale whether
 or not anyone removed the label; no gate trusts a label without checking freshness.
 
@@ -84,6 +86,7 @@ A gate reads a stage's latest report and compares every input it names with the 
 | `## Verification - …` | `PASS`, `FAIL`, `BLOCKED (...)` | `ai:verified` on `PASS` only |
 | `## Outcome - …` | `MANUAL`, `FAILED` | written with `ai:manual` / `ai:failed`, one line per decision or failure |
 | `## Product review (change) - …`, `head: <sha> - body: <digest>` | `APPROVE`, `RETURN` | `ai:approved` on `APPROVE` (`operator-contract` > Product review) |
+| `## UX review - …`, `head: <sha>` | `APPROVE`, `RETURN` | `ai:ux-approved` on `APPROVE` (`operator-contract` > UX review) |
 | `## <Stage> - HELD` | - | none; the refusal above |
 
 A stage that could not judge says so instead of passing.

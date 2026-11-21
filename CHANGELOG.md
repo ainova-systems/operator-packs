@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+A change that renders screens differently can be judged on its running deployment, as a success factor.
+
+### Added
+
+- Profile key `ux_review_skill` (default `none`: nothing changes). Set, together with `ai:ux-approved` in `pr_success_factors`, `operator-verify` runs that skill through profile `judge_runner` once the QA deployment serves the head and its verification passed (step 6a), posts its `## UX review - APPROVE|RETURN` report unchanged, and writes `ai:ux-approved` on `APPROVE` (`operator-contract` > UX review). The product review judges the diff before a deployment exists; this review judges the screens the deployment renders, against their closest shipped sibling and their look before the change.
+- `RETURN` clears `ai:ux-approved` and routes like a failed verification: to development for each finding, or to the owner, resumed by `verify`, when only a new design decision would settle one. A defect the screen had before the change is never a reason to return it.
+- Discovery row 8b asks `verify` for a ready pull request in Human Review or Merge Queue without a fresh `ai:ux-approved`, so no head merges unjudged; `operator-verify` step 7 takes a missing or stale `ai:ux-approved` to step 6a instead of development. A deployment reset makes it stale, as it does `ai:verified`.
+- The `uxApproved` label role (`operator_config` `labels.uxApproved`, default `ai:ux-approved`) names the factor for discovery.
+
+**Updating:**
+
+- Nothing changes while `ux_review_skill` is unset. To turn the review on: set the key, add `ai:ux-approved` to `pr_success_factors`, create the `ai:ux-approved` label, and add row 8b and the factor's freshness to the project's discovery. A branch started before the update runs the verify skill it started with: the project's runtime manifest decides how its slot reaches the new step, as it did for the product review's verdict.
+
 ## [0.20.1] - 2026-11-14
 
 ### Fixed

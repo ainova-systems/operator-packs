@@ -46,6 +46,7 @@ already covers is skipped.
 | 7 | in `humanReview`/`mergeQueue` and the head is not the one the last verification judged | `verify` | `moved:<head>` |
 | 8 | owner QA feedback (owner input or a QA ticket) newer than the last stage report, in `humanReview`/`mergeQueue` | `verify` | `feedback:<head>:…` |
 | 8a | in `humanReview`/`mergeQueue`, profile `pr_success_factors` declares `labels.approved` and it is not fresh: the label missing, or the newest `## Product review (change)` report not an `APPROVE` naming this head and body | `product-review` | `product-review:<head>:<body digest>:<owner input>` |
+| 8b | in `humanReview`/`mergeQueue`, not a draft, profile `pr_success_factors` declares `labels.uxApproved` and it is not fresh: the label missing, or the newest `## UX review` report not an `APPROVE` naming this head | `verify` | `ux:<head>:qa-<state>:<owner input>` |
 | 9 | `accepted`, in `humanReview`/`mergeQueue` | `merge` | `merge:<head>:…` |
 | 10 | `queue` | `plan` | `plan:<head>:<owner input>` |
 | 11 | `development`; skip while CI runs after a `CLEAN` review of this head with no newer owner input and no unresolved thread, and while `ai:manual` or `ai:failed` stands with no owner input after its `## Outcome` report (waiting for the owner) | `implement` | `implement:<head>:<ci>:<owner input>:<latest stage report id>` |

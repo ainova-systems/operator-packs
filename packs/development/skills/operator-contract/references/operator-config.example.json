@@ -17,7 +17,8 @@
     "cancelled": "owner:cancelled",
     "question": "owner:question",
     "handoff": "pipeline:handoff",
-    "approved": "ai:approved"
+    "approved": "ai:approved",
+    "uxApproved": "ai:ux-approved"
   },
   "allowedAuthors": ["OWNER", "MEMBER", "COLLABORATOR"],
   "slots": ["d1", "d2", "d3"],

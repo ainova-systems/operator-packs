@@ -39,7 +39,7 @@ that operation to the account's default.
 | `review-verdict` | `operator-review` | claude | sonnet | low | it posts a finished report unchanged and writes the label it earns, with no judgment of its own |
 | `product-review` | profile `product_review_skill` | another engine than `implement`'s | the product reviewer agent's tier | the product reviewer agent's effort | an independent judge of the change as product; with the key unset the operation is left out |
 | `product-review-verdict` | `operator-product-review` | claude | sonnet | low | like `review-verdict`: it posts a finished report and routes it, with no judgment of its own |
-| `verify` | `operator-verify` | claude | sonnet | high | it triages owner input and tickets and routes fixes; the judging is profile `verify_skill`'s, through profile `judge_runner` |
+| `verify` | `operator-verify` | claude | sonnet | high | it triages owner input and tickets and routes fixes; the judging is profile `verify_skill`'s and, when set, profile `ux_review_skill`'s, through profile `judge_runner`; a UX review adds the time of a crawl of the changed screens to the run |
 | `merge` | `operator-merge` | claude | sonnet | high | its guards are mechanical, but profile `merge_gates` are rules read against the diff, and it is the last gate before the merge |
 | `clarify` (clarification pack) | `operator-clarify` | claude | opus | high | it proposes resolutions and phrases questions the owner answers directly |
 

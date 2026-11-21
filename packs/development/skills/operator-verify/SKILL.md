@@ -11,19 +11,20 @@ of `operator.yaml`. Load the `operator-contract` skill first.
 
 | Contract | |
 |---|---|
-| Trigger | the verification milestone; new owner input, a QA ticket, or verification steps edited since the last verification on `humanReview` or `mergeQueue`; or `owner:revalidate` |
-| Work | oldest-first QA admission; profile `verify_skill` (default `git-verify-pr`) through profile `judge_runner`; feedback triage; profile `outcome_skill` (default `git-complete-pr`) |
-| Evidence | verification report at the head with the current steps digest; completion labels and PR URL |
+| Trigger | the verification milestone; new owner input, a QA ticket, verification steps edited since the last verification, or a declared `ai:ux-approved` that is not fresh, on `humanReview` or `mergeQueue`; or `owner:revalidate` |
+| Work | oldest-first QA admission; profile `verify_skill` (default `git-verify-pr`) and profile `ux_review_skill` (default `none`) through profile `judge_runner`; feedback triage; profile `outcome_skill` (default `git-complete-pr`) |
+| Evidence | verification report at the head with the current steps digest, and the UX review report at the head when profile `ux_review_skill` is set; completion labels and PR URL |
 | Next | fix → `development`, `implement`; passed → `humanReview`; QA, CI or a QA slot pending → `noop` |
 
 ## Steps
 
 1. **Re-check the PR.** A moved `input.head`, a changed milestone, a closed PR, `owner:onhold`, or
    another run's `ai:processing` (a HELD report, `operator-contract`) ends `noop`. Require the verification milestone, new owner input, edited
-   verification steps or a head no verification report stands at (a push the pipeline did not make,
-   such as a merge of the integration branch) on `humanReview` or `mergeQueue`, or a current `owner:revalidate`. Rejected and cancelled attempts go
+   verification steps, a head no verification report stands at (a push the pipeline did not make,
+   such as a merge of the integration branch) or a declared `ai:ux-approved` that is not fresh
+   (`operator-contract` > UX review) on `humanReview` or `mergeQueue`, or a current `owner:revalidate`. Rejected and cancelled attempts go
    to intake.
-2. **Claim and check out** the live head, reconciling the slot first (`operator-contract` > The slot stays with its pull request). Input, edited steps or a moved head on `humanReview` or `mergeQueue`, or revalidation
+2. **Claim and check out** the live head, reconciling the slot first (`operator-contract` > The slot stays with its pull request). Input, edited steps, a moved head or a stale `ai:ux-approved` on `humanReview` or `mergeQueue`, or revalidation
    from another milestone, moves the PR back to `verification` in the claim edit, removing an obsolete
    `ai:completed`; this is continued verification, not a hand-off.
 3. **Triage input.** Read owner input (profile `operator_discover --owner-input <n>`) and every
@@ -64,10 +65,20 @@ of `operator.yaml`. Load the `operator-contract` skill first.
    `native` judges in a fresh subagent (`operator-contract` > Judging stages) and everything above
    still applies, the `Verified steps` note included; otherwise release the claim and end `failed`,
    `retryable: true`.
+6a. **Judge the screens** when profile `ux_review_skill` is set and `pr_success_factors` declares
+   `ai:ux-approved` (`operator_config` `labels.uxApproved`), once the verification of this head
+   passed or stands fresh; otherwise go to step 7. It needs the same ready deployment serving the
+   head as step 6. On `owner:revalidate` or after a deployment reset, remove `ai:ux-approved` and judge
+   again. Run profile `ux_review_skill` through profile `judge_runner`, holding the checkout, refs and
+   deployment still, post its `## UX review` report unchanged with any screenshots it names below it,
+   and write `ai:ux-approved` only on `APPROVE`. A `RETURN` removes `ai:ux-approved` and routes by
+   step 4 with the report as evidence, or, when the report names an owner question, asks it with
+   `resume: verify`. The same engine fallback as step 6 applies.
 7. **Complete or yield.** Re-read owner input, the freshness of every factor profile
    `pr_success_factors` declares, and CI at the same head. New
    input is triaged first. A missing or stale review, or `ai:approved` when it is declared, returns to
-   `development` through step 4 (its evidence names the factor), so implementation requests that stage. CI pending → release the claim, `noop`. Every criterion passed, every
+   `development` through step 4 (its evidence names the factor), so implementation requests that stage;
+   a missing or stale `ai:ux-approved` takes step 6a. CI pending → release the claim, `noop`. Every criterion passed, every
    declared factor fresh, CI green, no unresolved thread and no owner decision → profile `outcome_skill` writes
    `ai:completed`, then the PR moves to `humanReview`. Result `done`, no next.
 
@@ -78,13 +89,16 @@ of `operator.yaml`. Load the `operator-contract` skill first.
 ## Verify
 
 - A passing run leaves a verification report at the head naming the current steps digest,
-  `ai:verified` and `ai:completed` fresh at that head, and the pull request in Human Review.
+  `ai:verified` and `ai:completed` fresh at that head, and the pull request in Human Review; with
+  profile `ux_review_skill` set, also a `## UX review - APPROVE` report at that head and
+  `ai:ux-approved`.
 - A routed fix leaves the evidence it names and the pull request in the development milestone.
 
 ## Scope / hand-off
 
-- Fixes are `operator-implement`; the verification procedure is profile `verify_skill` through profile
-  `judge_runner`; the outcome is profile `outcome_skill`; the merge is `operator-merge`.
+- Fixes are `operator-implement`; the verification procedure is profile `verify_skill` and the UX
+  review profile `ux_review_skill`, both through profile `judge_runner`; the outcome is profile
+  `outcome_skill`; the merge is `operator-merge`.
 
 ## Constraints
 

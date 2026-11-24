@@ -445,6 +445,16 @@ test('gh asks a read again after a network fault, and never repeats a write', ()
   assert.throws(() => gh(['api', 'graphql', '-f', 'query=query{viewer{login}}'], { exec: down.exec, wait }), /Command failed/);
   assert.equal(down.calls.length, 3);
 
+  // A gateway in front of the forge can answer 200 with plain text, an HTML page or nothing.
+  for (const stderr of ["invalid character 'o' in literal null (expecting 'u')\n", "invalid character '<' looking for beginning of value\n", 'unexpected end of JSON input\n']) {
+    const garbled = flaky(1, stderr);
+    assert.equal(gh(['api', 'graphql', '-f', 'query=query{viewer{login}}'], { exec: garbled.exec, wait: () => {} }), 'ok', stderr);
+    assert.equal(garbled.calls.length, 2);
+    const garbledWrite = flaky(1, stderr);
+    assert.throws(() => gh(['pr', 'edit', '7', '--title', 'x'], { exec: garbledWrite.exec, wait: () => {} }));
+    assert.equal(garbledWrite.calls.length, 1);
+  }
+
   const write = flaky(1, 'read: connection reset by peer');
   assert.throws(() => gh(['pr', 'comment', '7', '--body-file', 'b.md'], { exec: write.exec, wait }));
   assert.equal(write.calls.length, 1);

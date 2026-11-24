@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A forge read answered with something other than JSON (a gateway's plain text, HTML page or empty body) is asked again like a network fault, up to three times, instead of failing the run. A write is still never repeated.
+
+**Updating:** nothing to configure.
+
 ## [0.21.0] - 2026-11-21
 
 A change that renders screens differently can be judged on its running deployment, as a success factor.

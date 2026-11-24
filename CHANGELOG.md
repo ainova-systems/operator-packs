@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-11-24
+
+A forge read refused once with HTTP 401 no longer fails the run.
+
 ### Fixed
 
 - A forge read refused once with HTTP 401 is asked again like a network fault, up to three times, instead of failing the run; a token the forge keeps refusing still fails it. A write is still never repeated.

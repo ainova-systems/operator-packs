@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-11-24
+
+A forge read answered with something other than JSON no longer fails the run.
+
 ### Fixed
 
 - A forge read answered with something other than JSON (a gateway's plain text, HTML page or empty body) is asked again like a network fault, up to three times, instead of failing the run. A write is still never repeated.

@@ -455,6 +455,19 @@ test('gh asks a read again after a network fault, and never repeats a write', ()
     assert.equal(garbledWrite.calls.length, 1);
   }
 
+  // The forge can refuse a valid token for one call, even between two pages of one read; a token it keeps refusing still fails.
+  for (const stderr of ['gh: Bad credentials (HTTP 401)\n', 'HTTP 401: Bad credentials (https://api.example.com/graphql)\n']) {
+    const refused = flaky(1, stderr);
+    assert.equal(gh(['api', '--paginate', 'repos/{owner}/{repo}/issues/7/events'], { exec: refused.exec, wait: () => {} }), 'ok', stderr);
+    assert.equal(refused.calls.length, 2);
+    const invalid = flaky(9, stderr);
+    assert.throws(() => gh(['pr', 'view', '7'], { exec: invalid.exec, wait: () => {} }));
+    assert.equal(invalid.calls.length, 3);
+    const refusedWrite = flaky(1, stderr);
+    assert.throws(() => gh(['pr', 'edit', '7', '--title', 'x'], { exec: refusedWrite.exec, wait: () => {} }));
+    assert.equal(refusedWrite.calls.length, 1);
+  }
+
   const write = flaky(1, 'read: connection reset by peer');
   assert.throws(() => gh(['pr', 'comment', '7', '--body-file', 'b.md'], { exec: write.exec, wait }));
   assert.equal(write.calls.length, 1);

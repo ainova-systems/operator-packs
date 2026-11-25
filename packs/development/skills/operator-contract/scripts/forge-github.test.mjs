@@ -455,6 +455,19 @@ test('gh asks a read again after a network fault, and never repeats a write', ()
     assert.equal(garbledWrite.calls.length, 1);
   }
 
+  // Any server error of the forge is asked again, over HTTP or inside a GraphQL answer; a client error is not.
+  for (const stderr of ['failed to get runs: HTTP 500 (https://api.example.com/repos/o/r/actions/workflows?page=1&per_page=100)\n', 'gh: Server Error (HTTP 503)\n', 'GraphQL: Something went wrong while executing your query on 2026-01-01T00:00:00Z.\n']) {
+    const broken = flaky(1, stderr);
+    assert.equal(gh(['run', 'list', '--commit', 'abc'], { exec: broken.exec, wait: () => {} }), 'ok', stderr);
+    assert.equal(broken.calls.length, 2);
+    const brokenWrite = flaky(1, stderr);
+    assert.throws(() => gh(['pr', 'edit', '7', '--title', 'x'], { exec: brokenWrite.exec, wait: () => {} }));
+    assert.equal(brokenWrite.calls.length, 1);
+  }
+  const absent = flaky(1, 'gh: Not Found (HTTP 404)\n');
+  assert.throws(() => gh(['api', 'repos/o/r/git/ref/heads/5001'], { exec: absent.exec, wait: () => {} }));
+  assert.equal(absent.calls.length, 1);
+
   // The forge can refuse a valid token for one call, even between two pages of one read; a token it keeps refusing still fails.
   for (const stderr of ['gh: Bad credentials (HTTP 401)\n', 'HTTP 401: Bad credentials (https://api.example.com/graphql)\n']) {
     const refused = flaky(1, stderr);

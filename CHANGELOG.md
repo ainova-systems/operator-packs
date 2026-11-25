@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A forge read answered with any HTTP 5xx, or with a GraphQL answer reporting that the query went wrong on the forge's side, is asked again up to three times; only 502, 503 and 504 were. A write is still never repeated.
+
+**Updating:** nothing to configure.
+
 ## [0.21.2] - 2026-11-24
 
 A forge read refused once with HTTP 401 no longer fails the run.

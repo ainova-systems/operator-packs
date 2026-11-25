@@ -96,10 +96,11 @@ export function checkOperatorConfig(config, source = 'operator configuration') {
   return config;
 }
 
-// A network fault between this host and the forge, a gateway error in front of it, an answer that is not JSON,
+// A network fault between this host and the forge, a server error of the forge or its gateway, an answer that is not JSON,
 // or a 401 the forge gives a valid token for one call.
 const TRANSIENT = new RegExp([
-  'connection reset by peer', 'TLS handshake timeout', 'i/o timeout', 'unexpected EOF', 'connection refused', 'no such host', 'HTTP (?:401|50[234])',
+  'connection reset by peer', 'TLS handshake timeout', 'i/o timeout', 'unexpected EOF', 'connection refused', 'no such host', 'HTTP (?:401|5\\d\\d)',
+  'Something went wrong while executing your query',
   "invalid character '.+' (?:in literal|looking for beginning of value)", 'unexpected end of JSON input',
 ].join('|'), 'i');
 const READS = new Set(['list', 'view', 'checks', 'diff', 'status']);
